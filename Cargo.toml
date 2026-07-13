@@ -1,0 +1,17 @@
+[package]
+name = "prisma"
+version = "0.1.0"
+edition = "2024"
+license = "MIT"
+repository = "https://github.com/Drieh/Prisma"
+description = "A simple and lightweight GUI framework built with Rust and SDL3."
+readme = "README.md"
+keywords = ["gui", "framework", "sdl3", "rust", "2d"]
+categories = ["gui"]
+
+[dependencies]
+sdl3 = { version = "0.18.4", features = ["build-from-source"] }
+
+[[example]]
+name = "basic"
+path = "examples/basic.rs"
