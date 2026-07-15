@@ -5,11 +5,12 @@ use std::{
 
 use sdl3::{VideoSubsystem, render::Canvas, video::WindowFlags};
 
+use crate::render::Renderer;
 use crate::{app::PrismaError, nodes::Scene};
 
 pub struct AppWindow {
     scene: Scene,
-    canvas: Canvas<sdl3::video::Window>,
+    renderer: Renderer,
     id: u32,
 }
 impl AppWindow {
@@ -32,13 +33,17 @@ impl AppWindow {
 
         Ok(Self {
             id: window.id(),
-            canvas: window.into_canvas(),
+            renderer: Renderer::new(window.into_canvas()),
             scene,
         })
     }
 
     pub fn is_quitting(&self) -> bool {
         self.scene.is_quitting()
+    }
+
+    pub fn draw(&mut self) {
+        self.renderer.draw(&self.scene);
     }
 }
 pub struct WindowBuilder {
@@ -184,7 +189,7 @@ impl Prisma {
             }
 
             for app_window in self.windows.values_mut() {
-                let _ = app_window.scene.draw(&mut app_window.canvas);
+                let _ = app_window.draw();
             }
 
             if self.windows.len() == 0 {

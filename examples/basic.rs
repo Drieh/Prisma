@@ -25,15 +25,15 @@ fn main() {
         )
         .expect("Failed to create window 1.")
         .window(
-            WindowBuilder::new("Example 2")
+            WindowBuilder::new("Example")
                 .position_centered()
                 .resizable()
-                .size(500, 500),
+                .size(800, 400),
             scene_2,
         )
         .expect("Failed to create window 2.")
         .build()
-        .expect("Failed to create Prisma")
+        .expect("Failed to build Prisma.")
         .run();
 }
 
@@ -63,7 +63,7 @@ pub fn example_scene() -> Scene {
     scene
         .node(node_2)
         .unwrap()
-        .position(100, 100)
+        .position(50, 50)
         .bg_color(0, 255, 0, 255)
         .size(100, 100);
 
@@ -74,13 +74,14 @@ pub fn example_scene() -> Scene {
         .bg_color(0, 0, 255, 255)
         .size(100, 100);
 
+    scene.add_child(node_1, node_2).expect("msg");
     scene.add_child(node_2, node_3).expect("msg");
 
     scene.on_node(
         node_1,
         EventType::Mouse(MouseEventType::Click),
         Box::new(|context, target| {
-            println!("Closing in 3 sec. Byee, att node 1.");
+            println!("Closing... Byee, att node 1.");
             context.close(500);
             target
                 .bg_color(100, 0, 0, 255)
@@ -109,7 +110,7 @@ pub fn example_scene() -> Scene {
             {
                 if let Some(clicks) = target.get_state_mut::<i32>("clicks") {
                     *clicks += 1;
-                    println!("node 2 clicks count: {clicks}");
+                    println!("Node 2 clicks count: {clicks}");
                 }
             }
         }),

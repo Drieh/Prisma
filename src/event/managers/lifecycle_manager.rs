@@ -1,3 +1,5 @@
+use crate::nodes::NodeID;
+
 #[derive(Hash, Eq, PartialEq, Clone, Copy, Debug)]
 pub enum LifecycleEventType {
     Update,
@@ -8,8 +10,8 @@ pub enum LifecycleEventType {
 #[derive(Hash, Eq, PartialEq, Clone, Copy, Debug)]
 pub enum LifecycleEvent {
     Update,
-    Creation { target: usize },
-    Destruction { target: usize },
+    Creation { target: NodeID },
+    Destruction { target: NodeID },
 }
 impl LifecycleEvent {
     pub fn event_type(&self) -> LifecycleEventType {
@@ -29,7 +31,7 @@ impl LifecycleManager {
         Self { queue: Vec::new() }
     }
 
-    pub fn handle_creation(&mut self, target: usize) {
+    pub fn handle_creation(&mut self, target: NodeID) {
         self.queue.push(LifecycleEvent::Creation { target });
     }
 
@@ -37,7 +39,7 @@ impl LifecycleManager {
         self.queue.push(LifecycleEvent::Update);
     }
 
-    pub fn handle_destruction(&mut self, target: usize) {
+    pub fn handle_destruction(&mut self, target: NodeID) {
         self.queue.push(LifecycleEvent::Destruction { target });
     }
 

@@ -1,9 +1,11 @@
 use std::fmt;
 
+use crate::nodes::NodeID;
+
 #[derive(Debug)]
 pub enum PrismaError {
     InitError(String),
-    NodeNotFound(usize),
+    NodeNotFound(NodeID),
     RenderError(String),
 }
 impl fmt::Display for PrismaError {

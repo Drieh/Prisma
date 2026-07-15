@@ -6,18 +6,18 @@ use crate::event::context::NodeBuilder;
 use crate::event::managers::event_manager::CloseRequest;
 use crate::event::{EventManager, EventType, NodeCallback, SceneCallback};
 use crate::nodes::Node;
+use crate::nodes::NodeID;
 use sdl3::pixels::Color;
-use sdl3::render::Canvas;
-use sdl3::video::Window;
 use std::collections::HashMap;
 
 pub struct Scene {
-    color: Color,
+    pub color: Color,
 
-    nodes: HashMap<usize, Node>,
-    pending_created_nodes: Vec<usize>,
-    hovered_node: Option<usize>,
-    active_node: Option<usize>,
+    nodes: HashMap<NodeID, Node>,
+
+    pending_created_nodes: Vec<NodeID>,
+    hovered_node: Option<NodeID>,
+    active_node: Option<NodeID>,
 
     event_manager: EventManager,
     context_action_queue: Vec<ContextAction>,
@@ -30,7 +30,6 @@ impl Scene {
     pub fn new() -> Self {
         Self {
             color: Color::RGB(255, 255, 255),
-
             nodes: HashMap::new(),
             pending_created_nodes: Vec::new(),
             hovered_node: None,
@@ -39,12 +38,11 @@ impl Scene {
             event_manager: EventManager::new(),
             context_action_queue: Vec::new(),
             close_request: None,
-            //cancel_close_requested: false,
             quitting: false,
         }
     }
 
-    pub fn new_node(&mut self) -> usize {
+    pub fn new_node(&mut self) -> NodeID {
         let node = Node::new();
         let node_id = node.get_id();
         self.nodes.insert(node_id, node);
@@ -52,13 +50,13 @@ impl Scene {
         node_id
     }
 
-    pub fn add_child(&mut self, parent_id: usize, child_id: usize) -> Result<(), PrismaError> {
+    pub fn add_child(&mut self, parent_id: NodeID, child_id: NodeID) -> Result<(), PrismaError> {
         let parent = self.node(parent_id)?;
-        parent._add_child(child_id);
+        parent.add_child(child_id);
         let parent_transform = parent.get_transform().clone();
 
         let child = self.node(child_id)?;
-        child._set_parent(parent_id);
+        child.set_parent(Some(parent_id));
 
         let child_transform = child.get_transform().clone();
 
@@ -71,8 +69,15 @@ impl Scene {
         Ok(())
     }
 
-    pub fn node(&mut self, id: usize) -> Result<&mut Node, PrismaError> {
+    pub fn node(&mut self, id: NodeID) -> Result<&mut Node, PrismaError> {
         self.nodes.get_mut(&id).ok_or(PrismaError::NodeNotFound(id))
+    }
+    pub fn get_node(&self, id: NodeID) -> Result<&Node, PrismaError> {
+        self.nodes.get(&id).ok_or(PrismaError::NodeNotFound(id))
+    }
+
+    pub(crate) fn nodes(&self) -> &HashMap<NodeID, Node> {
+        &self.nodes
     }
 
     pub fn on_scene(&mut self, event_type: EventType, callback: SceneCallback) {
@@ -80,9 +85,9 @@ impl Scene {
             .add_scene_event_listener(event_type, callback);
     }
 
-    pub fn on_node(&mut self, node: usize, event_type: EventType, callback: NodeCallback) {
+    pub fn on_node(&mut self, node: NodeID, event_type: EventType, callback: NodeCallback) {
         self.event_manager
-            .add_event_listener(node, event_type, callback);
+            .add_node_event_listener(node, event_type, callback);
     }
 
     pub fn bg_color(&mut self, r: u8, g: u8, b: u8) {
@@ -93,7 +98,7 @@ impl Scene {
         self.quitting
     }
 
-    pub fn manage_lifecycle(&mut self) {
+    pub(crate) fn manage_lifecycle(&mut self) {
         let mut event_context = EventContext::new();
         let created = std::mem::take(&mut self.pending_created_nodes);
 
@@ -122,7 +127,7 @@ impl Scene {
             self.close_request = Some(request);
         }
 
-        if event_context.is_cancel_requested() {
+        if event_context.is_cancel_close_requested() {
             self.close_request = None;
             self.event_manager.cancel_close_request();
         }
@@ -136,7 +141,7 @@ impl Scene {
         }
     }
 
-    pub fn manage_sdl_event(&mut self, sdl_event: &sdl3::event::Event) {
+    pub(crate) fn manage_sdl_event(&mut self, sdl_event: &sdl3::event::Event) {
         let mut event_context = EventContext::new();
 
         self.event_manager.manage_user_event(sdl_event);
@@ -151,15 +156,15 @@ impl Scene {
             self.close_request = Some(request);
         }
 
-        if event_context.is_cancel_requested() {
+        if event_context.is_cancel_close_requested() {
             self.close_request = None;
             self.event_manager.cancel_close_request();
         }
     }
 
-    fn process_context_actions(&mut self) -> Vec<usize> {
+    fn process_context_actions(&mut self) -> Vec<NodeID> {
         let context_actions = std::mem::take(&mut self.context_action_queue);
-        let mut new_nodes: Vec<usize> = Vec::new();
+        let mut new_nodes: Vec<NodeID> = Vec::new();
 
         for action in context_actions {
             match action {
@@ -176,7 +181,7 @@ impl Scene {
                 }
                 ContextAction::AddChild { parent, child } => {
                     if let Some(parent_node) = self.nodes.get_mut(&parent) {
-                        parent_node._add_child(child);
+                        parent_node.add_child(child);
                     }
                 }
                 ContextAction::AddNodeEventListener {
@@ -231,8 +236,8 @@ impl Scene {
         new_node
     }
 
-    fn build_node_destruction_queue(&mut self) -> Vec<usize> {
-        let mut destruction_queue: Vec<usize> = Vec::new();
+    fn build_node_destruction_queue(&mut self) -> Vec<NodeID> {
+        let mut destruction_queue: Vec<NodeID> = Vec::new();
         for node in self.nodes.values_mut() {
             if node.is_destruction_requested() {
                 destruction_queue.push(node.get_id());
@@ -246,7 +251,7 @@ impl Scene {
         destruction_queue
     }
 
-    fn destroy_node(&mut self, node_id: usize) -> Result<(), PrismaError> {
+    fn destroy_node(&mut self, node_id: NodeID) -> Result<(), PrismaError> {
         let node = self.node(node_id)?;
 
         if node.children.len() > 0 {
@@ -256,114 +261,5 @@ impl Scene {
         }
         self.nodes.remove(&node_id);
         Ok(())
-    }
-
-    pub fn draw(&mut self, canvas: &mut Canvas<Window>) {
-        let mut layers: usize = 0;
-        for node in self.nodes.values() {
-            let node_layer = node.get_transform().layer.unwrap_or(0);
-            if node_layer > layers {
-                layers = node_layer
-            }
-        }
-        let render_queue: Vec<Vec<usize>> = self.build_render_layers(layers);
-
-        self.render(render_queue, canvas);
-        canvas.present();
-        return;
-    }
-
-    fn build_render_layers(&mut self, layers: usize) -> Vec<Vec<usize>> {
-        let mut render_queue: Vec<Vec<usize>> = Vec::new();
-        for layer in 0..=layers {
-            let mut layer_queue: Vec<usize> = Vec::new();
-            for node in self.nodes.values() {
-                if node.get_transform().layer.unwrap_or(0) != layer {
-                    continue;
-                }
-                layer_queue.push(node.get_id());
-            }
-            let sorted_queue = self.sort_render_layer(&mut layer_queue);
-            render_queue.push(sorted_queue);
-        }
-        render_queue
-    }
-
-    fn sort_render_layer(&mut self, layer: &[usize]) -> Vec<usize> {
-        let mut sorted = Vec::new();
-
-        for &current_node_id in layer {
-            let is_layer_root = if let Some(parent_node) = self
-                .node(current_node_id)
-                .expect("Internal invariant violated: render layer contains an invalid node ID")
-                .parent
-            {
-                self.node(parent_node)
-                    .expect("Internal invariant violated: render layer contains an invalid node ID")
-                    .get_transform()
-                    .layer
-                    .unwrap_or(0)
-                    != self
-                        .node(current_node_id)
-                        .expect(
-                            "Internal invariant violated: render layer contains an invalid node ID",
-                        )
-                        .get_transform()
-                        .layer
-                        .unwrap_or(0)
-            } else {
-                true
-            };
-            if is_layer_root {
-                self.push_render_node_family(current_node_id, layer, &mut sorted);
-            }
-        }
-        return sorted;
-    }
-
-    fn push_render_node_family(
-        &mut self,
-        node_id: usize,
-        layer: &[usize],
-        output: &mut Vec<usize>,
-    ) {
-        output.push(node_id);
-
-        let node = self
-            .node(node_id)
-            .expect("Internal invariant violated: render layer contains an invalid node ID");
-
-        for child_id in &node.children.clone() {
-            if layer.contains(child_id) {
-                self.push_render_node_family(*child_id, layer, output);
-            }
-        }
-    }
-
-    fn render(
-        &mut self,
-        render_queue: Vec<Vec<usize>>,
-        canvas: &mut sdl3::render::Canvas<sdl3::video::Window>,
-    ) {
-        canvas.set_draw_color(self.color);
-        canvas.clear();
-
-        for layer in render_queue {
-            for node_id in layer {
-                let world_position = self.node_world_position(node_id);
-                self.node(node_id)
-                    .expect("Internal invariant violated: render layer contains an invalid node ID")
-                    .draw(canvas, world_position);
-            }
-        }
-    }
-    pub fn node_world_position(&self, id: usize) -> Position {
-        let node = self.nodes.get(&id).expect("Invalid Node ID.");
-
-        if let Some(parent_id) = node.parent {
-            self.node_world_position(parent_id) + node.get_transform().position
-        } else {
-            node.get_transform().position
-        }
     }
 }

@@ -8,7 +8,10 @@ use sdl3::pixels::Color;
 use crate::{
     common::Position,
     event::{Event, EventType, NodeCallback, SceneCallback, managers::event_manager::CloseRequest},
-    nodes::components::{Style, Transform},
+    nodes::{
+        NodeID,
+        components::{Style, Transform},
+    },
 };
 
 pub enum ContextAction {
@@ -16,14 +19,14 @@ pub enum ContextAction {
         builder: NodeBuilder,
     },
     Destruction {
-        target: usize,
+        target: NodeID,
     },
     AddChild {
-        parent: usize,
-        child: usize,
+        parent: NodeID,
+        child: NodeID,
     },
     AddNodeEventListener {
-        target: usize,
+        target: NodeID,
         event_type: EventType,
         callback: NodeCallback,
     },
@@ -34,24 +37,25 @@ pub enum ContextAction {
 }
 
 pub struct EventContext {
-    action_queue: Vec<ContextAction>,
-
-    pub close_request: Option<CloseRequest>,
-    cancel_close_requested: bool,
-    destruction_requested: bool,
     pub event: Option<Event>,
+    pub close_request: Option<CloseRequest>,
+
+    propagation_stopped: bool,
+    action_queue: Vec<ContextAction>,
+    cancel_close_requested: bool,
 }
 impl EventContext {
     pub fn new() -> Self {
         Self {
-            action_queue: Vec::new(),
             event: None,
             close_request: None,
+
+            propagation_stopped: false,
+            action_queue: Vec::new(),
             cancel_close_requested: false,
-            destruction_requested: false,
         }
     }
-    pub fn on_node(&mut self, target: usize, event_type: EventType, callback: NodeCallback) {
+    pub fn on_node(&mut self, target: NodeID, event_type: EventType, callback: NodeCallback) {
         self.action_queue.push(ContextAction::AddNodeEventListener {
             target,
             event_type,
@@ -80,12 +84,12 @@ impl EventContext {
         self.action_queue.push(ContextAction::Creation { builder });
     }
 
-    pub fn destroy(&mut self, target: usize) {
+    pub fn destroy(&mut self, target: NodeID) {
         self.action_queue
             .push(ContextAction::Destruction { target });
     }
 
-    pub fn add_child(&mut self, parent: usize, child: usize) {
+    pub fn add_child(&mut self, parent: NodeID, child: NodeID) {
         self.action_queue
             .push(ContextAction::AddChild { parent, child });
     }
@@ -106,7 +110,7 @@ impl EventContext {
         self.close_request = None;
     }
 
-    pub fn is_cancel_requested(&self) -> bool {
+    pub fn is_cancel_close_requested(&self) -> bool {
         self.cancel_close_requested
     }
     pub fn _take_actions(&mut self) -> Vec<ContextAction> {

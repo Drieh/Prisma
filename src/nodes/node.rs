@@ -1,4 +1,4 @@
-use std::{any::Any, collections::HashMap};
+use std::{any::Any, collections::HashMap, fmt::Display, sync::atomic::AtomicU32};
 
 use crate::{
     common::Position,
@@ -7,12 +7,9 @@ use crate::{
 use sdl3::{pixels::Color, render::Canvas, video::Window};
 use std::{
     collections::VecDeque,
-    sync::atomic::{AtomicUsize, Ordering},
+    sync::atomic::Ordering,
     time::{Duration, Instant},
 };
-
-// ID 0 is reserved for scene
-static ID_COUNT: AtomicUsize = AtomicUsize::new(1);
 
 #[derive(Debug, Clone)]
 pub enum Action {
@@ -25,10 +22,26 @@ pub enum Action {
     DestructionRequest,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Ord, PartialOrd)]
+pub struct NodeID(u32);
+
+static NEXT_ID: AtomicU32 = AtomicU32::new(0);
+
+impl NodeID {
+    pub fn next() -> Self {
+        Self(NEXT_ID.fetch_add(1, Ordering::Relaxed))
+    }
+}
+impl Display for NodeID {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", self.0)
+    }
+}
+
 #[derive(Debug)]
 pub struct Node {
     transform: Transform,
-    id: usize,
+    id: NodeID,
     rect: Rect,
     style: Style,
     state: HashMap<String, Box<dyn Any>>,
@@ -38,14 +51,14 @@ pub struct Node {
 
     destruction_requested: bool,
 
-    pub children: Vec<usize>,
-    pub parent: Option<usize>,
+    pub(crate) children: Vec<NodeID>,
+    pub(crate) parent: Option<NodeID>,
 }
 
 impl Node {
-    pub fn new() -> Self {
+    pub(crate) fn new() -> Self {
         Self {
-            id: ID_COUNT.fetch_add(1, Ordering::Relaxed),
+            id: NodeID::next(),
             transform: Transform::new(),
             style: Style::new(),
             rect: Rect::new(),
@@ -88,29 +101,23 @@ impl Node {
         self.state.contains_key(key)
     }
 
-    pub fn get_id(&self) -> usize {
+    pub fn get_id(&self) -> NodeID {
         self.id
     }
-    pub fn _set_parent(&mut self, parent_id: usize) -> &mut Self {
-        if self.parent.is_some() {
-            return self;
-        }
-        self.parent = Some(parent_id);
+    pub fn set_parent(&mut self, parent: Option<NodeID>) -> &mut Self {
+        self.parent = parent;
         self
     }
-    pub fn _remove_parent(&mut self) -> &mut Self {
-        self.parent = None;
-        self
+    pub fn get_parent(&self) -> Option<NodeID> {
+        self.parent
     }
 
-    pub fn _add_child(&mut self, child_id: usize) {
+    pub(crate) fn add_child(&mut self, child_id: NodeID) {
         self.children.push(child_id);
     }
 
-    pub fn new_child(&mut self) {}
-
-    pub fn get_transform(&self) -> &Transform {
-        &self.transform
+    pub fn get_transform(&self) -> Transform {
+        self.transform
     }
     pub fn get_transform_as_mut(&mut self) -> &mut Transform {
         &mut self.transform
@@ -120,19 +127,7 @@ impl Node {
     }
 
     // Node request management
-    /*
-    pub fn close_request(&mut self, timer_ms: u64) -> &mut Self {
-        self.action_queue
-            .push_back(Action::CloseRequest { timer: timer_ms });
-        self
-    }
 
-    pub fn cancel_close(&mut self) -> &mut Self {
-        self.action_queue.push_back(Action::CancelClose);
-        self
-    }
-
-    */
     pub fn destroy(&mut self) {
         self.action_queue.push_back(Action::DestructionRequest);
     }
@@ -216,12 +211,12 @@ impl Node {
         }
     }
 
-    pub fn draw(&self, canvas: &mut Canvas<Window>, world_position: Position) {
+    pub(crate) fn draw(&self, canvas: &mut Canvas<Window>, world_position: Position) {
         let node_transform = self.get_transform();
 
         let draw_transform = Transform {
             position: world_position,
-            ..*node_transform
+            ..node_transform
         };
 
         self.rect.draw(canvas, &draw_transform, &self.style);

@@ -5,7 +5,7 @@ use crate::event::managers::{MouseEvent, MouseEventType, MouseManager};
 use std::collections::HashMap;
 
 use crate::common::Position;
-use crate::nodes::Node;
+use crate::nodes::{Node, NodeID};
 
 #[derive(Hash, Eq, PartialEq, Clone, Copy, Debug)]
 pub struct CloseRequest {
@@ -47,7 +47,7 @@ pub type NodeCallback = Box<dyn FnMut(&mut EventContext, &mut Node) + 'static>;
 pub type SceneCallback = Box<dyn FnMut(&mut EventContext) + 'static>;
 
 pub struct EventManager {
-    node_event_listeners: HashMap<usize, HashMap<EventType, Vec<NodeCallback>>>,
+    node_event_listeners: HashMap<NodeID, HashMap<EventType, Vec<NodeCallback>>>,
     scene_event_listeners: HashMap<EventType, Vec<SceneCallback>>,
 
     close_request: Option<CloseRequest>,
@@ -89,9 +89,9 @@ impl EventManager {
         self.quitting = true;
     }
 
-    pub fn add_event_listener(
+    pub fn add_node_event_listener(
         &mut self,
-        node_id: usize,
+        node_id: NodeID,
         event_type: EventType,
         callback: NodeCallback,
     ) {
@@ -116,7 +116,11 @@ impl EventManager {
         //self.keyboard_manager.handle_sdl_event(event);
     }
 
-    pub fn poll_lifecycle_events(&mut self, destruction_queue: &[usize], creation_queue: &[usize]) {
+    pub fn poll_lifecycle_events(
+        &mut self,
+        destruction_queue: &[NodeID],
+        creation_queue: &[NodeID],
+    ) {
         for target in creation_queue {
             self.lifecycle_manager.handle_creation(*target);
         }
@@ -161,13 +165,12 @@ impl EventManager {
         events
     }
 
-    fn hit_test(&self, x: f32, y: f32, nodes: &HashMap<usize, Node>) -> Option<usize> {
-        let mut result: Option<usize> = None;
-        let mut max_layer = i32::MIN;
+    fn hit_test(&self, x: f32, y: f32, nodes: &HashMap<NodeID, Node>) -> Vec<NodeID> {
+        let mut result: Vec<NodeID> = Vec::new();
+        let mut max_layer: usize = 0;
 
         for (id, node) in nodes.iter() {
             let (w, h) = node.get_size();
-
             let Position {
                 x: node_x,
                 y: node_y,
@@ -179,18 +182,16 @@ impl EventManager {
                 && y <= (node_y + h as f32);
 
             if inside {
-                let layer = node.get_transform().layer.unwrap_or(0) as i32;
-
-                if layer >= max_layer {
-                    max_layer = layer;
-                    result = Some(*id);
-                }
+                result.push(*id);
             }
         }
+
+        //result.sort();
+        println!("{:?}", result);
         result
     }
 
-    fn world_position(&self, nodes: &HashMap<usize, Node>, id: usize) -> Position {
+    fn world_position(&self, nodes: &HashMap<NodeID, Node>, id: NodeID) -> Position {
         let node = nodes.get(&id).expect("Invalid Node ID.");
 
         if let Some(parent) = node.parent {
@@ -205,7 +206,7 @@ impl EventManager {
      * Contains build_events() so can be called after every poll() to dispatch the events. Even two times per frame, if needed.
      * As it contains build_events(), clears the events from the managers after dispatching them.
      */
-    pub fn dispatch(&mut self, nodes: &mut HashMap<usize, Node>, context: &mut EventContext) {
+    pub fn dispatch(&mut self, nodes: &mut HashMap<NodeID, Node>, context: &mut EventContext) {
         let events = self.build_events();
 
         for event in events {
@@ -218,8 +219,8 @@ impl EventManager {
                         MouseEvent::MouseDown { x, y, .. }
                         | MouseEvent::MouseUp { x, y, .. }
                         | MouseEvent::Click { x, y, .. } => {
-                            if let Some(target_id) = self.hit_test(*x, *y, nodes) {
-                                self.dispatch_nodes(event_type, context, nodes, Some(target_id));
+                            if let Some(target_id) = self.hit_test(*x, *y, nodes).get(0) {
+                                self.dispatch_nodes(event_type, context, nodes, Some(*target_id));
                             }
                             self.dispatch_scene(event_type, context);
                         }
@@ -271,8 +272,8 @@ impl EventManager {
         &mut self,
         event_type: EventType,
         context: &mut EventContext,
-        nodes: &mut HashMap<usize, Node>,
-        target: Option<usize>,
+        nodes: &mut HashMap<NodeID, Node>,
+        target: Option<NodeID>,
     ) {
         if let Some(target_id) = target {
             if let Some(node) = nodes.get_mut(&target_id) {
