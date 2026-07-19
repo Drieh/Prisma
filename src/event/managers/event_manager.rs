@@ -1,11 +1,13 @@
-use crate::event::EventContext;
 use crate::event::managers::window_manager::{WindowEvent, WindowEventType, WindowManager};
 use crate::event::managers::{LifecycleEvent, LifecycleEventType, LifecycleManager};
 use crate::event::managers::{MouseEvent, MouseEventType, MouseManager};
+use crate::event::{EventContext, MouseButton};
 use std::collections::HashMap;
+use std::fmt::Display;
+use std::sync::atomic::{AtomicU32, Ordering};
 
 use crate::common::Position;
-use crate::nodes::{Node, NodeID};
+use crate::scene::{Node, NodeID};
 
 #[derive(Hash, Eq, PartialEq, Clone, Copy, Debug)]
 pub struct CloseRequest {
@@ -43,18 +45,40 @@ impl Event {
         }
     }
 }
+
+#[derive(Eq, Hash, PartialEq, Clone, Copy, Debug)]
+pub struct EventListenerID(u32);
+static NEXT_LISTENER_ID: AtomicU32 = AtomicU32::new(0);
+impl EventListenerID {
+    pub fn next() -> Self {
+        Self(NEXT_LISTENER_ID.fetch_add(1, Ordering::Relaxed))
+    }
+}
+impl Display for EventListenerID {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", self.0)
+    }
+}
+
 pub type NodeCallback = Box<dyn FnMut(&mut EventContext, &mut Node) + 'static>;
 pub type SceneCallback = Box<dyn FnMut(&mut EventContext) + 'static>;
 
 pub struct EventManager {
-    node_event_listeners: HashMap<NodeID, HashMap<EventType, Vec<NodeCallback>>>,
-    scene_event_listeners: HashMap<EventType, Vec<SceneCallback>>,
+    node_event_listeners:
+        HashMap<NodeID, HashMap<EventType, HashMap<EventListenerID, NodeCallback>>>,
+    scene_event_listeners: HashMap<EventType, HashMap<EventListenerID, SceneCallback>>,
+
+    node_listeners_lookup: HashMap<EventListenerID, (NodeID, EventType)>,
+    scene_listener_lookup: HashMap<EventListenerID, EventType>,
 
     close_request: Option<CloseRequest>,
-
     close_request_dispatched: bool,
     cancel_close_requested: bool,
     quitting: bool,
+
+    hovered_node: Option<NodeID>,
+    active_node: Option<NodeID>,
+    dragged_node: Option<NodeID>,
 
     mouse_manager: MouseManager,
     window_manager: WindowManager,
@@ -66,10 +90,17 @@ impl EventManager {
             node_event_listeners: HashMap::new(),
             scene_event_listeners: HashMap::new(),
 
+            node_listeners_lookup: HashMap::new(),
+            scene_listener_lookup: HashMap::new(),
+
             close_request: None,
             close_request_dispatched: false,
             cancel_close_requested: false,
             quitting: false,
+
+            hovered_node: None,
+            active_node: None,
+            dragged_node: None,
 
             mouse_manager: MouseManager::new(),
             window_manager: WindowManager::new(),
@@ -77,10 +108,17 @@ impl EventManager {
         }
     }
 
+    pub fn is_node_active(&self, target: NodeID) -> bool {
+        self.active_node == Some(target)
+    }
+    pub fn is_node_hovered(&self, target: NodeID) -> bool {
+        self.hovered_node == Some(target)
+    }
+
     pub fn send_close_request(&mut self, close_request: CloseRequest) {
         self.close_request = Some(close_request);
     }
-    pub fn cancel_close_request(&mut self) {
+    pub fn cancel_close(&mut self) {
         self.cancel_close_requested = true;
         self.close_request = None;
     }
@@ -94,20 +132,49 @@ impl EventManager {
         node_id: NodeID,
         event_type: EventType,
         callback: NodeCallback,
-    ) {
+    ) -> EventListenerID {
+        let id = EventListenerID::next();
         self.node_event_listeners
             .entry(node_id)
             .or_default()
             .entry(event_type)
             .or_default()
-            .push(callback);
+            .insert(id, callback);
+
+        self.node_listeners_lookup.insert(id, (node_id, event_type));
+        id
     }
 
-    pub fn add_scene_event_listener(&mut self, event_type: EventType, callback: SceneCallback) {
+    pub fn add_scene_event_listener(
+        &mut self,
+        event_type: EventType,
+        callback: SceneCallback,
+    ) -> EventListenerID {
+        let id = EventListenerID::next();
         self.scene_event_listeners
             .entry(event_type)
             .or_default()
-            .push(callback);
+            .insert(id, callback);
+        id
+    }
+
+    pub fn remove_event_listener(&mut self, target: EventListenerID) {
+        if let Some((node_id, event_type)) = self.node_listeners_lookup.get(&target) {
+            self.node_event_listeners
+                .get_mut(node_id)
+                .expect("Invalid node listener lookup.")
+                .get_mut(event_type)
+                .expect("Invalid event listener lookup.")
+                .remove(&target);
+
+            self.node_listeners_lookup.remove(&target);
+        } else if let Some(event_type) = self.scene_listener_lookup.get(&target) {
+            self.scene_event_listeners
+                .get_mut(event_type)
+                .expect("Invalid scene listener lookup.")
+                .remove(&target);
+            self.scene_listener_lookup.remove(&target);
+        }
     }
 
     pub fn manage_user_event(&mut self, sdl_event: &sdl3::event::Event) {
@@ -135,7 +202,7 @@ impl EventManager {
      * Builds a list of events from the various managers.
      * Returns the list of events.
      */
-    fn build_events(&mut self) -> Vec<Event> {
+    fn take_events(&mut self) -> Vec<Event> {
         let mut events: Vec<Event> = Vec::new();
 
         for event in self.mouse_manager.take_events() {
@@ -181,20 +248,50 @@ impl EventManager {
                 && x <= (node_x + w as f32)
                 && y <= (node_y + h as f32);
 
+            let node_layer = node.get_transform().layer.unwrap_or(0);
+            if max_layer < node_layer {
+                max_layer = node_layer;
+            }
+
             if inside {
                 result.push(*id);
             }
         }
+        result.sort_by(|node_id_1, node_id_2| {
+            let node_layer_1 = nodes
+                .get(node_id_1)
+                .unwrap()
+                .get_transform()
+                .layer
+                .unwrap_or(0);
 
-        //result.sort();
-        println!("{:?}", result);
+            let node_layer_2 = nodes
+                .get(node_id_2)
+                .unwrap()
+                .get_transform()
+                .layer
+                .unwrap_or(0);
+
+            if node_layer_1 > node_layer_2 {
+                std::cmp::Ordering::Greater
+            } else if node_layer_1 < node_layer_2 {
+                std::cmp::Ordering::Less
+            } else {
+                if node_id_1 > node_id_2 {
+                    std::cmp::Ordering::Greater
+                } else {
+                    std::cmp::Ordering::Less
+                }
+            }
+        });
+
         result
     }
 
     fn world_position(&self, nodes: &HashMap<NodeID, Node>, id: NodeID) -> Position {
         let node = nodes.get(&id).expect("Invalid Node ID.");
 
-        if let Some(parent) = node.parent {
+        if let Some(parent) = node.get_parent() {
             self.world_position(nodes, parent) + node.get_transform().position
         } else {
             node.get_transform().position
@@ -207,55 +304,78 @@ impl EventManager {
      * As it contains build_events(), clears the events from the managers after dispatching them.
      */
     pub fn dispatch(&mut self, nodes: &mut HashMap<NodeID, Node>, context: &mut EventContext) {
-        let events = self.build_events();
+        let events = self.take_events();
 
         for event in events {
             context.event = Some(event);
             let event_type = event.event_type();
 
-            match &context.event.unwrap() {
-                Event::Mouse { event } => {
-                    match event {
-                        MouseEvent::MouseDown { x, y, .. }
-                        | MouseEvent::MouseUp { x, y, .. }
-                        | MouseEvent::Click { x, y, .. } => {
-                            if let Some(target_id) = self.hit_test(*x, *y, nodes).get(0) {
-                                self.dispatch_nodes(event_type, context, nodes, Some(*target_id));
-                            }
-                            self.dispatch_scene(event_type, context);
-                        }
-                        MouseEvent::MouseMove { .. } => {
-                            // opcional: hover system después
-                            self.dispatch_scene(event_type, context);
+            self.dispatch_scene(event_type, context);
+            match event {
+                Event::Mouse { event } => match event {
+                    MouseEvent::MouseDown { x, y, .. } => {
+                        if let Some(target_id) = self.hit_test(x, y, nodes).pop() {
+                            self.dispatch_node(event_type, context, nodes, target_id);
+
+                            self.active_node = Some(target_id);
                         }
                     }
-                }
+                    MouseEvent::MouseUp { .. } => {
+                        self.dispatch_all_nodes(event_type, context, nodes);
+                        self.active_node = None;
+                    }
+                    MouseEvent::MouseMove { x, y } => {
+                        self.dispatch_all_nodes(event_type, context, nodes);
+                        if let Some(target) = self.hit_test(x, y, nodes).pop() {
+                            self.hovered_node = Some(target);
+                        } else {
+                            self.hovered_node = None;
+                        }
+                    }
+                    MouseEvent::Click { .. } => {
+                        if let Some(active) = self.active_node {
+                            self.dispatch_node(event_type, context, nodes, active);
+                        }
+                    }
+                    MouseEvent::DragStart { x, y, .. } => {
+                        if let Some(target) = self.hit_test(x, y, nodes).pop() {
+                            self.dispatch_node(event_type, context, nodes, target);
+                            self.dragged_node = Some(target);
+                        }
+                    }
+                    MouseEvent::Drag { .. } => {
+                        if let Some(target) = self.dragged_node {
+                            self.dispatch_node(event_type, context, nodes, target);
+                        }
+                    }
+                    MouseEvent::DragEnd { .. } => {
+                        if let Some(target_id) = self.dragged_node {
+                            self.dispatch_node(event_type, context, nodes, target_id);
+                        }
+                        self.dragged_node = None;
+                    }
+                    _ => {}
+                },
                 Event::Window { .. } => {
-                    self.dispatch_scene(event_type, context);
-                    self.dispatch_nodes(event_type, context, nodes, None);
+                    self.dispatch_all_nodes(event_type, context, nodes);
                 }
                 Event::Lifecycle { event } => match event {
                     LifecycleEvent::Destruction { target } => {
-                        self.dispatch_scene(event_type, context);
-                        self.dispatch_nodes(event_type, context, nodes, Some(*target));
+                        self.dispatch_node(event_type, context, nodes, target);
                     }
                     LifecycleEvent::Creation { target } => {
-                        self.dispatch_scene(event_type, context);
-                        self.dispatch_nodes(event_type, context, nodes, Some(*target));
+                        self.dispatch_node(event_type, context, nodes, target);
                     }
                     LifecycleEvent::Update => {
-                        self.dispatch_scene(event_type, context);
-                        self.dispatch_nodes(event_type, context, nodes, None);
+                        self.dispatch_all_nodes(event_type, context, nodes);
                     }
                 },
                 Event::AppCloseRequest | Event::Quit => {
-                    self.dispatch_scene(event_type, context);
-                    self.dispatch_nodes(event_type, context, nodes, None);
+                    self.dispatch_all_nodes(event_type, context, nodes);
                 }
                 Event::CancelAppCloseRequest => {
                     self.close_request = None;
-                    self.dispatch_scene(event_type, context);
-                    self.dispatch_nodes(event_type, context, nodes, None);
+                    self.dispatch_all_nodes(event_type, context, nodes);
                 }
             }
         }
@@ -263,38 +383,55 @@ impl EventManager {
 
     fn dispatch_scene(&mut self, event_type: EventType, context: &mut EventContext) {
         if let Some(callbacks) = self.scene_event_listeners.get_mut(&event_type) {
-            for callback in callbacks {
+            for callback in callbacks.values_mut() {
+                println!("scene context event: {:?}", context.event);
                 (callback)(context);
             }
         }
     }
-    fn dispatch_nodes(
+    fn dispatch_all_nodes(
         &mut self,
         event_type: EventType,
         context: &mut EventContext,
         nodes: &mut HashMap<NodeID, Node>,
-        target: Option<NodeID>,
     ) {
-        if let Some(target_id) = target {
-            if let Some(node) = nodes.get_mut(&target_id) {
-                if let Some(listeners) = self.node_event_listeners.get_mut(&target_id) {
-                    if let Some(callbacks) = listeners.get_mut(&event_type) {
-                        for callback in callbacks {
-                            callback(context, node);
-                        }
-                    }
+        for node in nodes.values_mut() {
+            let Some(listeners) = self.node_event_listeners.get_mut(&node.id()) else {
+                continue;
+            };
+            let Some(callbacks) = listeners.get_mut(&event_type) else {
+                continue;
+            };
+            for callback in callbacks.values_mut() {
+                callback(context, node);
+            }
+        }
+    }
+    fn dispatch_node(
+        &mut self,
+        event_type: EventType,
+        context: &mut EventContext,
+        nodes: &mut HashMap<NodeID, Node>,
+        target: NodeID,
+    ) {
+        let mut dispatch_to_parent = false;
+        let node = nodes.get_mut(&target).expect("Invalid ID");
+
+        println!("dispatch node context event: {:?}", context.event);
+        if let Some(listeners) = self.node_event_listeners.get_mut(&target) {
+            if let Some(callbacks) = listeners.get_mut(&event_type) {
+                for callback in callbacks.values_mut() {
+                    callback(context, node);
                 }
+            } else {
+                dispatch_to_parent = true;
             }
         } else {
-            for node in nodes.values_mut() {
-                if let Some(listeners) = self.node_event_listeners.get_mut(&node.get_id()) {
-                    if let Some(callbacks) = listeners.get_mut(&event_type) {
-                        for callback in callbacks {
-                            callback(context, node);
-                        }
-                    }
-                }
-            }
+            dispatch_to_parent = true;
+        }
+
+        if dispatch_to_parent && let Some(parent) = node.get_parent() {
+            self.dispatch_node(event_type, context, nodes, parent);
         }
     }
 }

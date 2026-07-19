@@ -1,10 +1,11 @@
 use std::fmt;
 
-use crate::nodes::NodeID;
+use crate::scene::NodeID;
 
 #[derive(Debug)]
 pub enum PrismaError {
     InitError(String),
+    NodeStateNotFound(String),
     NodeNotFound(NodeID),
     RenderError(String),
 }
@@ -19,6 +20,9 @@ impl fmt::Display for PrismaError {
             }
             PrismaError::NodeNotFound(id) => {
                 write!(f, "Node {id} not found")
+            }
+            PrismaError::NodeStateNotFound(key) => {
+                write!(f, "Node state {key} not found")
             }
         }
     }

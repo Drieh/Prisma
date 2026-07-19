@@ -1,4 +1,4 @@
-use crate::nodes::components::{Style, Transform};
+use crate::scene::components::{Style, Transform};
 use sdl3::rect::Point;
 use sdl3::render::Canvas;
 use sdl3::video::Window;

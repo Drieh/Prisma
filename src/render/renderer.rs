@@ -1,4 +1,4 @@
-use crate::{Scene, common::Position, nodes::NodeID};
+use crate::{common::Position, scene::NodeID, scene::Scene};
 use sdl3::{render::Canvas, video::Window};
 
 pub struct Renderer {
@@ -11,29 +11,30 @@ impl Renderer {
     }
 
     pub fn draw(&mut self, scene: &Scene) {
-        let mut max_layer: usize = 0;
+        let mut layers: Vec<usize> = Vec::new();
         for node in scene.nodes().values() {
             let node_layer = node.get_transform().layer.unwrap_or(0);
-            if node_layer > max_layer {
-                max_layer = node_layer
+            if !layers.contains(&node_layer) {
+                layers.push(node_layer);
             }
         }
-        let render_queue: Vec<Vec<NodeID>> = self.build_render_layers(max_layer, scene);
+        let render_queue: Vec<Vec<NodeID>> = self.build_render_layers(layers, scene);
 
         self.render(render_queue, scene);
         self.canvas.present();
         return;
     }
 
-    pub fn build_render_layers(&mut self, max_layer: usize, scene: &Scene) -> Vec<Vec<NodeID>> {
+    pub fn build_render_layers(&mut self, layers: Vec<usize>, scene: &Scene) -> Vec<Vec<NodeID>> {
+        // optimizar sistema de layers. guardar solo layers que existen en vez de recorrer hasta la maxima
         let mut render_queue: Vec<Vec<NodeID>> = Vec::new();
-        for layer in 0..=max_layer {
+        for layer in layers {
             let mut layer_queue: Vec<NodeID> = Vec::new();
             for node in scene.nodes().values() {
                 if node.get_transform().layer.unwrap_or(0) != layer {
                     continue;
                 }
-                layer_queue.push(node.get_id());
+                layer_queue.push(node.id());
             }
             let sorted_queue = self.sort_render_layer(&mut layer_queue, scene);
             render_queue.push(sorted_queue);
@@ -48,7 +49,7 @@ impl Renderer {
             let is_layer_root = if let Some(parent_node) = scene
                 .get_node(current_node_id)
                 .expect("Internal invariant violated: render layer contains an invalid node ID")
-                .parent
+                .get_parent()
             {
                 scene
                     .get_node(parent_node)
@@ -87,7 +88,7 @@ impl Renderer {
             .get_node(node_id)
             .expect("Internal invariant violated: render layer contains an invalid node ID");
 
-        for child_id in &node.children.clone() {
+        for child_id in &node.get_children().clone() {
             if layer.contains(child_id) {
                 self.push_render_node_family(*child_id, layer, output, scene);
             }
@@ -112,7 +113,7 @@ impl Renderer {
     pub fn node_world_position(&self, id: NodeID, scene: &Scene) -> Position {
         let node = scene.nodes().get(&id).expect("Invalid Node ID.");
 
-        if let Some(parent_id) = node.parent {
+        if let Some(parent_id) = node.get_parent() {
             self.node_world_position(parent_id, scene) + node.get_transform().position
         } else {
             node.get_transform().position

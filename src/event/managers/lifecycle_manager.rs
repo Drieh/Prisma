@@ -1,4 +1,4 @@
-use crate::nodes::NodeID;
+use crate::scene::NodeID;
 
 #[derive(Hash, Eq, PartialEq, Clone, Copy, Debug)]
 pub enum LifecycleEventType {

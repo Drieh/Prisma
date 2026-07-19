@@ -1,9 +1,9 @@
 mod app;
 mod common;
 pub mod event;
-mod nodes;
 mod render;
+pub mod scene;
 
 pub use app::Prisma;
 pub use app::WindowBuilder;
-pub use nodes::Scene;
+pub use common::Position;

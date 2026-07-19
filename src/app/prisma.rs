@@ -6,7 +6,7 @@ use std::{
 use sdl3::{VideoSubsystem, render::Canvas, video::WindowFlags};
 
 use crate::render::Renderer;
-use crate::{app::PrismaError, nodes::Scene};
+use crate::{app::PrismaError, scene::Scene};
 
 pub struct AppWindow {
     scene: Scene,
@@ -167,18 +167,28 @@ impl Prisma {
         while self.running {
             let frame_start = Instant::now();
             let windows_close_queue = std::mem::take(&mut self.windows_close_queue);
+
+            // life cycle events
+            for app_window in self.windows.values_mut() {
+                app_window
+                    .scene
+                    .manage_lifecycle()
+                    .expect("Error in lifecycle");
+            }
+            // sdl user events
             for sdl_event in self.event_pump.poll_iter() {
                 for app_window in self.windows.values_mut() {
                     if let Some(window_id) = sdl_event.get_window_id() {
                         if window_id == app_window.id {
-                            app_window.scene.manage_sdl_event(&sdl_event);
+                            app_window
+                                .scene
+                                .manage_sdl_event(&sdl_event)
+                                .expect("Error in user events");
                         }
                     }
                 }
             }
-            for app_window in self.windows.values_mut() {
-                app_window.scene.manage_lifecycle();
-            }
+            // window close management
             for window_id in self.windows.keys().clone() {
                 if self.windows.get(window_id).unwrap().is_quitting() {
                     self.windows_close_queue.push(*window_id);
@@ -188,10 +198,12 @@ impl Prisma {
                 self.windows.remove(&window_id);
             }
 
+            // render
             for app_window in self.windows.values_mut() {
-                let _ = app_window.draw();
+                app_window.draw();
             }
 
+            // closing app
             if self.windows.len() == 0 {
                 self.running = false;
             }
