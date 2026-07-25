@@ -3,7 +3,10 @@ use std::time::{Duration, Instant};
 use crate::{
     app::PrismaError,
     event::{Event, EventManager, EventType, managers::event_manager::CallbackID},
-    scene::{NodeID, NodeStorage, NodeView, storage::StorageHandler},
+    scene::{
+        nodes::{NodeID, NodeView},
+        storage::{NodeStorage, StorageHandler},
+    },
 };
 
 #[derive(Hash, Eq, PartialEq, Clone, Copy, Debug)]

@@ -1,6 +1,6 @@
 use std::fmt;
 
-use crate::scene::NodeID;
+use crate::scene::nodes::NodeID;
 
 #[derive(Debug)]
 pub enum PrismaError {

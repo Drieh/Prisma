@@ -1,7 +1,7 @@
 use std::collections::HashMap;
 
-use crate::scene::node_storage::ListenerQueue;
-use crate::{app::PrismaError, scene::NodeID};
+use crate::app::PrismaError;
+use crate::scene::nodes::{ListenerQueue, NodeID};
 pub struct ListenerQueueHandler<'a> {
     pub(crate) storage: &'a mut HashMap<NodeID, ListenerQueue>,
 }

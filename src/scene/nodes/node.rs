@@ -2,7 +2,16 @@ use crate::{
     event::{EventContext, EventType, managers::event_manager::CallbackID},
     util::{Color, Position},
 };
-use std::{fmt::Display, sync::atomic::AtomicU32, sync::atomic::Ordering, time::Duration};
+use std::{
+    collections::VecDeque,
+    fmt::Display,
+    sync::atomic::{AtomicU32, Ordering},
+    time::Duration,
+};
+
+// Types
+pub type ListenerQueue = Vec<NodeListenerAction>;
+pub type ActionQueue = VecDeque<NodeAction>;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum NodeActionType {

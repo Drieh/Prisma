@@ -1,11 +1,11 @@
 use crate::{
     app::PrismaError,
     event::{EventContext, EventType, managers::event_manager::CallbackID},
+    nodes::{ActionQueue, ListenerQueue},
     scene::{
-        NodeAction, NodeID, NodeStorage,
         components::{NodeState, Style, Transform, TreeNode},
-        node::NodeListenerAction,
-        storage::StorageHandler,
+        nodes::{NodeAction, NodeID, NodeListenerAction},
+        storage::{NodeStorage, StorageHandler},
     },
     util::{Color, Position},
 };
@@ -43,10 +43,10 @@ impl<'a> NodeView<'a> {
     pub fn get_node_state(&self) -> &NodeState {
         self.storage.state.get_unchecked(self.id)
     }
-    pub fn get_action_queue(&self) -> &VecDeque<NodeAction> {
+    pub fn get_action_queue(&self) -> &ActionQueue {
         self.storage.action_queue.get_unchecked(self.id)
     }
-    pub fn get_listener_action_queue(&self) -> &Vec<NodeListenerAction> {
+    pub fn get_listener_action_queue(&self) -> &ListenerQueue {
         self.storage.listener_queue.get_unchecked(self.id)
     }
 

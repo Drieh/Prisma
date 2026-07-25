@@ -2,7 +2,7 @@ use std::{any::Any, collections::HashMap};
 
 use crate::{
     app::PrismaError,
-    scene::{NodeID, components::NodeState},
+    scene::{components::NodeState, nodes::NodeID},
 };
 
 pub struct StateHandler<'a> {

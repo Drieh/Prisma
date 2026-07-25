@@ -1,20 +1,16 @@
-use std::collections::{HashMap, VecDeque};
+use std::collections::HashMap;
 
 use crate::{
     app::PrismaError,
     scene::{
-        NodeAction, NodeID, NodeListenerAction, NodeView,
         components::{NodeState, Style, Transform, TreeNode},
+        nodes::{ActionQueue, ListenerQueue, NodeID, NodeListenerAction, NodeView},
         storage::{
             ActionQueueHandler, ListenerQueueHandler, StateHandler, StorageHandler, StyleHandler,
             TransformHandler, TreeHandler,
         },
     },
 };
-
-// Types
-pub type ListenerQueue = Vec<NodeListenerAction>;
-pub type ActionQueue = VecDeque<NodeAction>;
 
 pub struct NodeStorage {
     tree: HashMap<NodeID, TreeNode>,

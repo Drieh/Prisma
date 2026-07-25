@@ -1,16 +1,11 @@
 use prismae::Prisma;
+use prismae::Scene;
 use prismae::WindowBuilder;
-use prismae::event::Event;
-use prismae::event::LifecycleEventType;
-use prismae::event::MouseEvent;
-use prismae::event::WindowEventType;
-use prismae::scene::Scene;
+use prismae::event::{
+    Event, EventType, LifecycleEventType, MouseEvent, MouseEventType, WindowEventType,
+};
+use prismae::nodes::NodeAction;
 use prismae::util::{Color, Position};
-
-use prismae::scene::NodeAction;
-
-use prismae::event::EventType;
-use prismae::event::MouseEventType;
 
 fn main() {
     let scene = example_scene();
@@ -80,7 +75,7 @@ pub fn example_scene() -> Scene {
             if let Event::Mouse {
                 event: MouseEvent::DragStart { x, y, .. },
             } = ctx.event()
-                && let Some(mut target) = ctx.og_target()
+                && let Some(mut target) = ctx.target()
             {
                 let Position {
                     x: node_x,
@@ -93,7 +88,7 @@ pub fn example_scene() -> Scene {
             if let Event::Mouse {
                 event: MouseEvent::Drag { x, y, .. },
             } = ctx.event()
-                && let Some(mut target) = ctx.og_target()
+                && let Some(mut target) = ctx.target()
             {
                 let (node_x, node_y) = *target.get_state::<(f32, f32)>("offset").unwrap();
                 target.position((x - node_x) as i32, (y - node_y) as i32);

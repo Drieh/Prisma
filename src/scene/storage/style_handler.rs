@@ -2,7 +2,7 @@ use std::collections::HashMap;
 
 use crate::{
     app::PrismaError,
-    scene::{NodeID, components::Style},
+    scene::{components::Style, nodes::NodeID},
 };
 
 pub struct StyleHandler<'a> {

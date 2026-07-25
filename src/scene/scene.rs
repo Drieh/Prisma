@@ -5,12 +5,12 @@ use crate::event::context::CloseRequest;
 use crate::event::context::EventContext;
 use crate::event::managers::event_manager::CallbackID;
 use crate::event::{EventManager, EventType};
-use crate::scene::NodeAction;
-use crate::scene::NodeActionType;
-use crate::scene::NodeID;
-use crate::scene::node::NodeListenerAction;
-use crate::scene::node_storage::NodeStorage;
-use crate::scene::node_view::NodeView;
+use crate::scene::nodes::NodeAction;
+use crate::scene::nodes::NodeActionType;
+use crate::scene::nodes::NodeID;
+use crate::scene::nodes::NodeListenerAction;
+use crate::scene::nodes::NodeView;
+use crate::scene::storage::NodeStorage;
 use sdl3::pixels::Color;
 
 struct CloseHandler {

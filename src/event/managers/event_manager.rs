@@ -7,7 +7,7 @@ use std::collections::HashMap;
 use std::fmt::Display;
 use std::sync::atomic::{AtomicU32, Ordering};
 
-use crate::scene::NodeID;
+use crate::scene::nodes::NodeID;
 use crate::util::Position;
 
 #[derive(Hash, Eq, PartialEq, Clone, Copy, Debug)]
@@ -79,8 +79,8 @@ impl Display for CallbackID {
 }
 
 pub struct Callback {
-    pub(crate) id: CallbackID,
-    pub(crate) callback: Box<dyn FnMut(&mut EventContext) + 'static>,
+    pub id: CallbackID,
+    pub callback: Box<dyn FnMut(&mut EventContext) + 'static>,
 }
 
 pub struct EventManager {

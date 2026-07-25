@@ -2,7 +2,7 @@ use std::collections::HashMap;
 
 use crate::{
     app::PrismaError,
-    scene::{NodeID, components::Transform},
+    scene::{components::Transform, nodes::NodeID},
 };
 
 pub struct TransformHandler<'a> {

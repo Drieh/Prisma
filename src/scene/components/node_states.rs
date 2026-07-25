@@ -2,7 +2,7 @@ use std::{any::Any, collections::HashMap, time::Instant};
 
 use crate::{
     app::PrismaError,
-    scene::{NodeAction, NodeActionType, NodeID},
+    scene::nodes::{NodeAction, NodeActionType, NodeID},
 };
 
 pub struct NodeState {

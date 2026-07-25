@@ -2,7 +2,7 @@ use std::collections::HashMap;
 
 use crate::{
     app::PrismaError,
-    scene::{NodeID, components::TreeNode},
+    scene::{components::TreeNode, nodes::NodeID},
 };
 
 pub struct TreeHandler<'a> {
