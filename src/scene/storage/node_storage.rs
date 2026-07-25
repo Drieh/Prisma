@@ -41,17 +41,12 @@ impl NodeStorage {
     }
 
     pub fn exists(&self, id: NodeID) -> bool {
-        if self.tree.contains_key(&id)
+        self.tree.contains_key(&id)
             && self.state.contains_key(&id)
             && self.transform.contains_key(&id)
             && self.style.contains_key(&id)
             && self.action_queue.contains_key(&id)
             && self.listener_queue.contains_key(&id)
-        {
-            true
-        } else {
-            false
-        }
     }
 
     pub fn storage(&mut self) -> StorageHandler<'_> {
@@ -83,6 +78,6 @@ impl NodeStorage {
     }
 
     pub(crate) fn take_listener_queue(&mut self, id: NodeID) -> Vec<NodeListenerAction> {
-        std::mem::take(&mut self.listener_queue.get_mut(&id).unwrap())
+        std::mem::take(self.listener_queue.get_mut(&id).unwrap())
     }
 }

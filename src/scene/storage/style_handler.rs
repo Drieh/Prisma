@@ -9,6 +9,7 @@ pub struct StyleHandler<'a> {
     pub(crate) storage: &'a mut HashMap<NodeID, Style>,
 }
 
+#[expect(dead_code)]
 impl<'a> StyleHandler<'a> {
     pub(crate) fn new(storage: &'a mut HashMap<NodeID, Style>) -> Self {
         Self { storage }

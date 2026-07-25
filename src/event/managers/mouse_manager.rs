@@ -107,24 +107,12 @@ impl MouseManager {
 
     fn match_sdl_mouse_button(&self, button: SdlMouseButton) -> MouseButton {
         match button {
-            SdlMouseButton::Left => {
-                return MouseButton::Left;
-            }
-            SdlMouseButton::Middle => {
-                return MouseButton::Middle;
-            }
-            SdlMouseButton::Right => {
-                return MouseButton::Right;
-            }
-            SdlMouseButton::X1 => {
-                return MouseButton::X1;
-            }
-            SdlMouseButton::X2 => {
-                return MouseButton::X2;
-            }
-            SdlMouseButton::Unknown => {
-                return MouseButton::Unknown;
-            }
+            SdlMouseButton::Left => MouseButton::Left,
+            SdlMouseButton::Middle => MouseButton::Middle,
+            SdlMouseButton::Right => MouseButton::Right,
+            SdlMouseButton::X1 => MouseButton::X1,
+            SdlMouseButton::X2 => MouseButton::X2,
+            SdlMouseButton::Unknown => MouseButton::Unknown,
         }
     }
 

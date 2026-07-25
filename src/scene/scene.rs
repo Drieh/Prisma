@@ -79,10 +79,6 @@ impl PendingNodesHandler {
         self.destroyed.push(id);
     }
 
-    pub fn created_contains(&self, id: NodeID) -> bool {
-        self.created.contains(&id)
-    }
-
     pub fn destroyed_contains(&self, id: NodeID) -> bool {
         self.destroyed.contains(&id)
     }
@@ -95,7 +91,6 @@ pub struct Scene {
     pending_nodes_handler: PendingNodesHandler,
     close_handler: CloseHandler,
 }
-
 impl Scene {
     pub fn new() -> Self {
         Self {
@@ -151,20 +146,15 @@ impl Scene {
         let pending_created_nodes = self.pending_nodes_handler.take_created();
         let pending_destroyed_nodes = self.pending_nodes_handler.take_destroyed();
 
-        self.event_manager.manage_lifecycle_events(
-            &mut context,
-            &pending_destroyed_nodes,
-            &pending_created_nodes,
-        );
+        self.event_manager
+            .manage_lifecycle_events(&pending_created_nodes, &pending_destroyed_nodes);
 
         self.event_manager.dispatch(&mut context);
 
         context.process_context_actions(&mut self.event_manager)?;
 
-        // for next frame
         self.pending_nodes_handler.extend_pending(&mut context);
 
-        // usan context
         self.close_handler
             .handle_close(&mut context, &mut self.event_manager);
 
@@ -315,42 +305,33 @@ impl Scene {
     }
 
     fn execute_node_action(&mut self, id: NodeID, action: NodeAction) {
+        let mut node = self
+            .get_node(id)
+            .expect("Invariant violation: nodes contains an invalid ID");
         match action {
             NodeAction::Position { position, absolute } => {
                 if let Some(value) = position {
-                    self.nodes
-                        .storage()
-                        .transform
-                        .get_unchecked_mut(id)
-                        .position = value;
+                    node.get_transform_mut().position = value;
                 }
                 if let Some(value) = absolute {
-                    self.nodes
-                        .storage()
-                        .transform
-                        .get_unchecked_mut(id)
-                        .position_absolute = value;
+                    node.get_transform_mut().position_absolute = value;
                 }
             }
 
             NodeAction::Size { width, height } => {
-                self.nodes.storage().style.get_unchecked_mut(id).size = (width, height);
+                node.get_style_mut().size = (width, height);
             }
             NodeAction::Scale { x, y } => {
-                self.nodes.storage().transform.get_unchecked_mut(id).scale = (x, y);
+                node.get_transform_mut().scale = (x, y);
             }
             NodeAction::BGColor { color } => {
-                self.nodes.storage().style.get_unchecked_mut(id).color = color;
+                node.get_style_mut().color = color;
             }
             NodeAction::Layer { layer } => {
-                self.nodes.storage().transform.get_unchecked_mut(id).layer = Some(layer);
+                node.get_transform_mut().layer = Some(layer);
             }
             NodeAction::BorderRadius { radius } => {
-                self.nodes
-                    .storage()
-                    .style
-                    .get_unchecked_mut(id)
-                    .border_radius = radius;
+                node.get_style_mut().border_radius = radius;
             }
             NodeAction::Wait { duration } => {
                 self.nodes
@@ -360,5 +341,10 @@ impl Scene {
                     .waiting_until = Some(Instant::now() + duration);
             }
         }
+    }
+}
+impl Default for Scene {
+    fn default() -> Self {
+        Self::new()
     }
 }

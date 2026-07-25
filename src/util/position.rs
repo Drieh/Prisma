@@ -10,6 +10,12 @@ impl Position {
         Self { x: 0.0, y: 0.0 }
     }
 }
+impl Default for Position {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl Add for Position {
     type Output = Position;
 

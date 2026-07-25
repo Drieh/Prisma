@@ -84,18 +84,12 @@ impl<'a> EventContext<'a> {
     }
 
     pub fn og_target(&mut self) -> Option<NodeView<'_>> {
-        if let Some(target) = self.target {
-            Some(self.get_node(target).unwrap())
-        } else {
-            None
-        }
+        self.current_target
+            .map(|target| self.get_node(target).unwrap())
     }
     pub fn target(&mut self) -> Option<NodeView<'_>> {
-        if let Some(target) = self.current_target {
-            Some(self.get_node(target).unwrap())
-        } else {
-            None
-        }
+        self.current_target
+            .map(|target| self.get_node(target).unwrap())
     }
 
     pub fn stop_propagation(&mut self) {

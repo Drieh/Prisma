@@ -170,13 +170,13 @@ impl Prisma {
             // events
             for sdl_event in self.event_pump.poll_iter() {
                 for app_window in self.windows.values_mut() {
-                    if let Some(window_id) = sdl_event.get_window_id() {
-                        if window_id == app_window.id {
-                            app_window
-                                .scene
-                                .manage_sdl_events(&sdl_event)
-                                .expect("Error in user events");
-                        }
+                    if let Some(window_id) = sdl_event.get_window_id()
+                        && window_id == app_window.id
+                    {
+                        app_window
+                            .scene
+                            .manage_sdl_events(&sdl_event)
+                            .expect("Error in user events");
                     }
                 }
             }
@@ -196,7 +196,7 @@ impl Prisma {
             }
 
             // closing app
-            if self.windows.len() == 0 {
+            if self.windows.is_empty() {
                 self.running = false;
             }
 
@@ -217,7 +217,7 @@ impl AppBuilder {
     pub fn new(video_subsystem: VideoSubsystem, sdl_context: sdl3::Sdl) -> Self {
         Self {
             video_subsystem,
-            sdl_context: sdl_context,
+            sdl_context,
             windows: Vec::new(),
         }
     }

@@ -1,3 +1,4 @@
+pub mod components;
 mod node;
 mod node_view;
 

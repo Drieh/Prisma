@@ -24,7 +24,7 @@ impl WindowEvent {
             WindowEvent::Resized { .. } => WindowEventType::Resized,
             WindowEvent::Minimized { .. } => WindowEventType::Minimized,
             WindowEvent::Maximized { .. } => WindowEventType::Maximized,
-            WindowEvent::CloseRequest { .. } => WindowEventType::CloseRequest,
+            WindowEvent::CloseRequest => WindowEventType::CloseRequest,
         }
     }
 }

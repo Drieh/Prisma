@@ -16,17 +16,12 @@ pub struct StorageHandler<'a> {
 }
 impl<'a> StorageHandler<'a> {
     pub fn has_node(&self, id: NodeID) -> bool {
-        if self.tree.contains(id)
+        self.tree.contains(id)
             && self.state.contains(id)
             && self.transform.contains(id)
             && self.style.contains(id)
             && self.action_queue.contains(id)
             && self.listener_queue.contains(id)
-        {
-            true
-        } else {
-            false
-        }
     }
 
     pub fn get_nodes(&self) -> Vec<NodeID> {

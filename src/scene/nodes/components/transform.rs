@@ -32,9 +32,9 @@ impl Add for Transform {
         }
     }
 }
-impl<'a, 'b> Add<&'b Transform> for &'a Transform {
+impl Add<&Transform> for &Transform {
     type Output = Transform;
-    fn add(self, rhs: &'b Transform) -> Transform {
+    fn add(self, rhs: &Transform) -> Transform {
         *self + *rhs
     }
 }

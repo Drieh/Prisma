@@ -9,7 +9,7 @@ use sdl3::{pixels::Color as SdlColor, rect::Point, render::Canvas, video::Window
 pub struct Renderer {
     canvas: Canvas<Window>,
 }
-
+#[expect(dead_code)]
 impl Renderer {
     pub fn new(canvas: Canvas<Window>) -> Self {
         let mut _self = Self { canvas };
@@ -30,7 +30,7 @@ impl Renderer {
         for id in scene.get_nodes_id() {
             let node = scene.get_node(id).unwrap();
             if node.get_parent().is_none() {
-                let layer = node.get_transform().clone().layer;
+                let layer = node.get_transform().layer;
                 self.visit(id, scene, layer, &mut render_queue);
             }
         }
@@ -69,7 +69,7 @@ impl Renderer {
             .get_node(id)
             .expect("Internal invariant violated: render layer contains an invalid node ID");
 
-        let node_transform = node.get_transform().clone();
+        let node_transform = *node.get_transform();
 
         let draw_transform = Transform {
             position: world_position,
@@ -88,14 +88,14 @@ impl Renderer {
         let border_radius = node.get_style().border_radius;
         let (scale_x, scale_y) = (draw_transform.scale.0, draw_transform.scale.1);
 
-        let radius_x = if border_radius as f32 * scale_x as f32 > width as f32 / 2.0 {
-            (width / 2) as u32
+        let radius_x = if border_radius as f32 * scale_x > width as f32 / 2.0 {
+            width / 2
         } else {
             (border_radius as f32 * scale_x).round() as u32
         };
 
-        let radius_y = if border_radius as f32 * scale_y as f32 > height as f32 / 2.0 {
-            (height / 2) as u32
+        let radius_y = if border_radius as f32 * scale_y > height as f32 / 2.0 {
+            height / 2
         } else {
             (border_radius as f32 * scale_y).round() as u32
         };
@@ -151,9 +151,10 @@ impl Renderer {
         }
     }
 
+    #[allow(clippy::get_first)]
     fn draw_triangle(&mut self, p1: Point, p2: Point, p3: Point) {
         let mut points: Vec<Point> = vec![p1, p2, p3];
-        points.sort_by(|p1, p2| p1.x.cmp(&p2.x));
+        points.sort_by_key(|p| p.x);
 
         let point_a = points.get(0).unwrap();
         let point_b = points.get(1).unwrap();

@@ -3,7 +3,7 @@ use crate::event::context::{CloseRequest, PropagationState};
 use crate::event::managers::{LifecycleEvent, LifecycleEventType, LifecycleManager};
 use crate::event::managers::{MouseEvent, MouseEventType, MouseManager};
 use crate::event::managers::{WindowEvent, WindowEventType, WindowManager};
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::fmt::Display;
 use std::sync::atomic::{AtomicU32, Ordering};
 
@@ -226,22 +226,27 @@ impl EventManager {
 
     pub fn manage_lifecycle_events(
         &mut self,
-        context: &mut EventContext,
-        destruction_queue: &[NodeID],
-        creation_queue: &[NodeID],
+        pending_created: &Vec<NodeID>,
+        pending_destroyed: &Vec<NodeID>,
     ) {
-        for target in creation_queue {
-            self.lifecycle_manager.handle_creation(*target);
-        }
-        for target in destruction_queue {
-            self.lifecycle_manager.handle_destruction(*target);
-        }
-        // optimizar!!!!
-        for target in context.storage().get_nodes() {
-            if creation_queue.contains(&target) || destruction_queue.contains(&target) {
+        let mut already_updated: HashSet<NodeID> = HashSet::new();
+        for (target, event_type) in self.node_listeners_lookup.values() {
+            if *event_type != EventType::Lifecycle(LifecycleEventType::Update) {
                 continue;
             }
-            self.lifecycle_manager.handle_update(target);
+            if pending_created.contains(target) || pending_destroyed.contains(target) {
+                continue;
+            }
+            if !already_updated.insert(*target) {
+                continue;
+            }
+            self.lifecycle_manager.handle_update(*target);
+        }
+        for target in pending_created {
+            self.lifecycle_manager.handle_creation(*target);
+        }
+        for target in pending_destroyed {
+            self.lifecycle_manager.handle_destruction(*target);
         }
     }
 
@@ -293,10 +298,8 @@ impl EventManager {
                 y: node_y,
             } = node.get_world_position();
 
-            let inside = x >= node_x as f32
-                && y >= node_y as f32
-                && x <= (node_x + w as f32)
-                && y <= (node_y + h as f32);
+            let inside =
+                x >= node_x && y >= node_y && x <= (node_x + w as f32) && y <= (node_y + h as f32);
 
             let node_layer = node.get_transform().layer.unwrap_or(0);
             if max_layer < node_layer {
@@ -486,20 +489,15 @@ impl EventManager {
             self.dispatch_node(event_type, context, node_id);
         }
     }
-    fn dispatch_node<'a>(
-        &mut self,
-        event_type: EventType,
-        context: &mut EventContext,
-        target: NodeID,
-    ) {
+    fn dispatch_node(&mut self, event_type: EventType, context: &mut EventContext, target: NodeID) {
         context.current_target = Some(target);
 
-        if let Some(listeners) = self.node_event_listeners.get_mut(&target) {
-            if let Some(callbacks) = listeners.get_mut(&event_type) {
-                for callback in callbacks.values_mut() {
-                    context.current_callback = Some(callback.id);
-                    (callback.callback)(context);
-                }
+        if let Some(listeners) = self.node_event_listeners.get_mut(&target)
+            && let Some(callbacks) = listeners.get_mut(&event_type)
+        {
+            for callback in callbacks.values_mut() {
+                context.current_callback = Some(callback.id);
+                (callback.callback)(context);
             }
         }
 

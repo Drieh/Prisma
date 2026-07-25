@@ -162,7 +162,7 @@ impl<'a> NodeView<'a> {
         if !self.storage.has_node(id) {
             return Err(PrismaError::NodeNotFound(id));
         }
-        let self_transform = self.storage.transform.get_unchecked(id).clone();
+        let self_transform = *self.storage.transform.get_unchecked(id);
         if !self_transform.position_absolute
             && let tree = self.storage.tree.get_unchecked(id).clone()
             && let Some(parent) = tree.get_parent()
