@@ -1,5 +1,5 @@
 use crate::scene::{
-    nodes::NodeID,
+    NodeID,
     storage::{
         ActionQueueHandler, ListenerQueueHandler, StateHandler, StyleHandler, TransformHandler,
         TreeHandler,

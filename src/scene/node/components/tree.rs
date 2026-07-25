@@ -1,4 +1,4 @@
-use crate::scene::nodes::NodeID;
+use crate::scene::NodeID;
 
 #[derive(Debug, Clone)]
 pub struct TreeNode {

@@ -1,10 +1,10 @@
 use std::time::{Duration, Instant};
 
 use crate::{
-    app::PrismaError,
+    app::error::PrismaError,
     event::{Event, EventManager, EventType, managers::event_manager::CallbackID},
     scene::{
-        nodes::{NodeID, NodeView},
+        NodeID, NodeView,
         storage::{NodeStorage, StorageHandler},
     },
 };

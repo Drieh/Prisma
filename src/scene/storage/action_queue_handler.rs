@@ -1,8 +1,11 @@
 use std::collections::{HashMap, VecDeque};
 
 use crate::{
-    app::PrismaError,
-    scene::nodes::{ActionQueue, NodeAction, NodeID},
+    error::PrismaError,
+    scene::{
+        NodeID,
+        node::{ActionQueue, NodeAction},
+    },
 };
 
 pub struct ActionQueueHandler<'a> {

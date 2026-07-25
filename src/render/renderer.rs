@@ -1,7 +1,7 @@
 use std::collections::BTreeMap;
 
 use crate::{
-    scene::{Scene, components::Transform, nodes::NodeID},
+    scene::{NodeID, Scene, node::components::Transform},
     util::Position,
 };
 use sdl3::{pixels::Color as SdlColor, rect::Point, render::Canvas, video::Window};

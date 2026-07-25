@@ -1,8 +1,11 @@
 use std::{any::Any, collections::HashMap, time::Instant};
 
 use crate::{
-    app::PrismaError,
-    scene::nodes::{NodeAction, NodeActionType, NodeID},
+    error::PrismaError,
+    scene::{
+        NodeID,
+        node::{NodeAction, NodeActionType},
+    },
 };
 
 pub struct NodeState {

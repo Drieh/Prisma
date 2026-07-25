@@ -1,8 +1,8 @@
 use std::fmt;
 
-use crate::scene::nodes::NodeID;
+use crate::scene::NodeID;
 
-#[derive(Debug)]
+#[derive(Debug, PartialEq)]
 pub enum PrismaError {
     InitError(String),
     InvalidTree((NodeID, NodeID)),

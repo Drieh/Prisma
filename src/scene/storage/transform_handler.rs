@@ -1,8 +1,8 @@
 use std::collections::HashMap;
 
 use crate::{
-    app::PrismaError,
-    scene::{components::Transform, nodes::NodeID},
+    error::PrismaError,
+    scene::{NodeID, node::components::Transform},
 };
 
 pub struct TransformHandler<'a> {

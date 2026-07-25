@@ -1,8 +1,8 @@
 use std::collections::HashMap;
 
 use crate::{
-    app::PrismaError,
-    scene::{components::Style, nodes::NodeID},
+    error::PrismaError,
+    scene::{NodeID, node::components::Style},
 };
 
 pub struct StyleHandler<'a> {

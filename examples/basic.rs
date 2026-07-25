@@ -4,7 +4,7 @@ use prismae::WindowBuilder;
 use prismae::event::{
     Event, EventType, LifecycleEventType, MouseEvent, MouseEventType, WindowEventType,
 };
-use prismae::nodes::NodeAction;
+use prismae::node::NodeAction;
 use prismae::util::{Color, Position};
 
 fn main() {

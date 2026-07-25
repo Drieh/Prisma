@@ -6,7 +6,7 @@ use std::{
 use sdl3::{VideoSubsystem, video::WindowFlags};
 
 use crate::render::Renderer;
-use crate::{app::PrismaError, scene::Scene};
+use crate::{app::error::PrismaError, scene::Scene};
 
 pub struct AppWindow {
     scene: Scene,

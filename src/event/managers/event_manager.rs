@@ -7,7 +7,7 @@ use std::collections::{HashMap, HashSet};
 use std::fmt::Display;
 use std::sync::atomic::{AtomicU32, Ordering};
 
-use crate::scene::nodes::NodeID;
+use crate::scene::NodeID;
 use crate::util::Position;
 
 #[derive(Hash, Eq, PartialEq, Clone, Copy, Debug)]

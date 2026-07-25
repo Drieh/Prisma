@@ -1,10 +1,11 @@
 use std::collections::HashMap;
 
 use crate::{
-    app::PrismaError,
+    error::PrismaError,
     scene::{
-        components::{NodeState, Style, Transform, TreeNode},
-        nodes::{ActionQueue, ListenerQueue, NodeID, NodeListenerAction, NodeView},
+        NodeID,
+        node::components::{NodeState, Style, Transform, TreeNode},
+        node::{ActionQueue, ListenerQueue, NodeListenerAction, NodeView},
         storage::{
             ActionQueueHandler, ListenerQueueHandler, StateHandler, StorageHandler, StyleHandler,
             TransformHandler, TreeHandler,

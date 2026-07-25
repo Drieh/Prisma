@@ -1,15 +1,15 @@
 use std::time::Instant;
 
-use crate::app::PrismaError;
+use crate::error::PrismaError;
 use crate::event::context::CloseRequest;
 use crate::event::context::EventContext;
 use crate::event::managers::event_manager::CallbackID;
 use crate::event::{EventManager, EventType};
-use crate::scene::nodes::NodeAction;
-use crate::scene::nodes::NodeActionType;
-use crate::scene::nodes::NodeID;
-use crate::scene::nodes::NodeListenerAction;
-use crate::scene::nodes::NodeView;
+use crate::scene::NodeID;
+use crate::scene::NodeView;
+use crate::scene::node::NodeAction;
+use crate::scene::node::NodeActionType;
+use crate::scene::node::NodeListenerAction;
 use crate::scene::storage::NodeStorage;
 use sdl3::pixels::Color;
 
@@ -108,7 +108,7 @@ impl Scene {
         new_node
     }
 
-    pub fn node_exists(&self, id: NodeID) -> bool {
+    pub fn contains(&self, id: NodeID) -> bool {
         self.nodes.exists(id)
     }
 

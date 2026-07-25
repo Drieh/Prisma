@@ -1,15 +1,21 @@
 use crate::{
-    app::PrismaError,
+    error::PrismaError,
     event::{EventContext, EventType, managers::event_manager::CallbackID},
-    nodes::{ActionQueue, ListenerQueue},
+    node::{ActionQueue, ListenerQueue},
     scene::{
-        components::{NodeState, Style, Transform, TreeNode},
-        nodes::{NodeAction, NodeID, NodeListenerAction},
+        NodeID,
+        node::components::{NodeState, Style, Transform, TreeNode},
+        node::{NodeAction, NodeListenerAction},
         storage::{NodeStorage, StorageHandler},
     },
     util::{Color, Position},
 };
-use std::{any::Any, collections::VecDeque, time::Duration};
+use std::{
+    any::Any,
+    collections::VecDeque,
+    fmt::{Debug, Display},
+    time::Duration,
+};
 
 pub struct NodeView<'a> {
     id: NodeID,
@@ -273,5 +279,15 @@ impl<'a> NodeView<'a> {
                 .insert(action.get_type(), *action);
         }
         self
+    }
+}
+impl<'a> Display for NodeView<'a> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "Node view for node {}", self.id)
+    }
+}
+impl<'a> Debug for NodeView<'a> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "Node view for node {}", self.id)
     }
 }

@@ -1,8 +1,8 @@
 use std::collections::HashMap;
 
 use crate::{
-    app::PrismaError,
-    scene::{components::TreeNode, nodes::NodeID},
+    error::PrismaError,
+    scene::{NodeID, node::components::TreeNode},
 };
 
 pub struct TreeHandler<'a> {

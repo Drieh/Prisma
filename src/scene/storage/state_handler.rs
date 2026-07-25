@@ -1,8 +1,8 @@
 use std::{any::Any, collections::HashMap};
 
 use crate::{
-    app::PrismaError,
-    scene::{components::NodeState, nodes::NodeID},
+    error::PrismaError,
+    scene::{NodeID, node::components::NodeState},
 };
 
 pub struct StateHandler<'a> {
