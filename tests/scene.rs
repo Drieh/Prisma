@@ -1,4 +1,3 @@
-use prismae::event::{EventType, LifecycleEventType};
 use prismae::node::NodeID;
 use prismae::{Scene, error::PrismaError};
 
