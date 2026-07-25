@@ -25,7 +25,7 @@ pub struct NodeStorage {
     listener_queue: HashMap<NodeID, ListenerQueue>,
 }
 impl NodeStorage {
-    pub fn new() -> Self {
+    pub(crate) fn new() -> Self {
         Self {
             tree: HashMap::new(),
             style: HashMap::new(),
@@ -39,7 +39,7 @@ impl NodeStorage {
     pub fn new_node(&mut self) -> NodeView<'_> {
         let id = NodeID::next();
 
-        self.get_handler().context_insert(id);
+        self.storage().insert_context(id);
 
         self.get_node(id).expect("Node creation failed!")
     }
@@ -58,7 +58,7 @@ impl NodeStorage {
         }
     }
 
-    pub fn get_handler(&mut self) -> StorageHandler<'_> {
+    pub fn storage(&mut self) -> StorageHandler<'_> {
         StorageHandler {
             tree: TreeHandler::new(&mut self.tree),
             state: StateHandler::new(&mut self.state),
@@ -82,11 +82,11 @@ impl NodeStorage {
             return Err(PrismaError::NodeNotFound(id));
         }
 
-        self.get_handler().context_remove(id);
+        self.storage().remove_context(id);
         Ok(())
     }
 
-    pub fn take_listener_queue(&mut self, id: NodeID) -> Vec<NodeListenerAction> {
+    pub(crate) fn take_listener_queue(&mut self, id: NodeID) -> Vec<NodeListenerAction> {
         std::mem::take(&mut self.listener_queue.get_mut(&id).unwrap())
     }
 }

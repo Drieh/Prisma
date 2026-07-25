@@ -3,7 +3,7 @@ use std::time::{Duration, Instant};
 use crate::{
     app::PrismaError,
     event::{Event, EventManager, EventType, managers::event_manager::CallbackID},
-    scene::{NodeAction, NodeID, NodeStorage, NodeView, storage::StorageHandler},
+    scene::{NodeID, NodeStorage, NodeView, storage::StorageHandler},
 };
 
 #[derive(Hash, Eq, PartialEq, Clone, Copy, Debug)]
@@ -108,11 +108,11 @@ impl<'a> EventContext<'a> {
     }
 
     pub fn storage(&mut self) -> StorageHandler<'_> {
-        self.nodes.get_handler()
+        self.nodes.storage()
     }
 
-    pub fn get_nodes_id(&mut self) -> Vec<NodeID> {
-        self.nodes.get_handler().get_nodes_id()
+    pub fn get_nodes(&mut self) -> Vec<NodeID> {
+        self.nodes.storage().get_nodes()
     }
 
     pub fn on_scene<F>(&mut self, event_type: EventType, callback: F)
@@ -141,7 +141,7 @@ impl<'a> EventContext<'a> {
     pub fn destroy(&mut self, target: NodeID) {
         self.storage()
             .state
-            .context_get_mut(target)
+            .get_unchecked_mut(target)
             .destruction_requested = true;
         self.action_queue.push(ContextAction::Destroy { target });
     }
@@ -222,103 +222,5 @@ impl<'a> EventContext<'a> {
             }
         }
         Ok(())
-    }
-
-    pub(crate) fn process_node_actions(
-        &mut self,
-        event_manager: &mut EventManager,
-    ) -> Result<(), PrismaError> {
-        for id in self.nodes.get_nodes_id() {
-            if !self.nodes.exists(id) {
-                return Err(PrismaError::NodeNotFound(id));
-            }
-            let is_hovered = event_manager.is_node_hovered(id);
-            let is_active = event_manager.is_node_active(id);
-
-            for action in self
-                .storage()
-                .state
-                .context_get_mut(id)
-                .og_state
-                .clone()
-                .values()
-            {
-                self.execute_node_action(id, *action);
-            }
-            if is_hovered {
-                for action in self
-                    .storage()
-                    .state
-                    .context_get_mut(id)
-                    .on_hover
-                    .clone()
-                    .values()
-                {
-                    self.execute_node_action(id, *action);
-                }
-            }
-            if is_active {
-                for action in self
-                    .storage()
-                    .state
-                    .context_get_mut(id)
-                    .on_active
-                    .clone()
-                    .values()
-                {
-                    self.execute_node_action(id, *action);
-                }
-            }
-            if let Some(until) = self.storage().state.context_get_mut(id).waiting_until {
-                if Instant::now() < until {
-                    return Ok(());
-                }
-                self.storage().state.context_get_mut(id).waiting_until = None;
-            }
-            if let Some(action) = self.storage().action_queue.context_get_mut(id).pop_front() {
-                self.storage()
-                    .state
-                    .context_get_mut(id)
-                    .og_state
-                    .insert(action.get_type(), action);
-            }
-        }
-        Ok(())
-    }
-
-    fn execute_node_action(&mut self, id: NodeID, action: NodeAction) {
-        match action {
-            NodeAction::Position { position, absolute } => {
-                if let Some(value) = position {
-                    self.storage().transform.context_get_mut(id).position = value;
-                }
-                if let Some(value) = absolute {
-                    self.storage()
-                        .transform
-                        .context_get_mut(id)
-                        .position_absolute = value;
-                }
-            }
-
-            NodeAction::Size { width, height } => {
-                self.storage().style.context_get_mut(id).size = (width, height);
-            }
-            NodeAction::Scale { x, y } => {
-                self.storage().transform.context_get_mut(id).scale = (x, y);
-            }
-            NodeAction::BGColor { color } => {
-                self.storage().style.context_get_mut(id).color = color;
-            }
-            NodeAction::Layer { layer } => {
-                self.storage().transform.context_get_mut(id).layer = Some(layer);
-            }
-            NodeAction::BorderRadius { radius } => {
-                self.storage().style.context_get_mut(id).border_radius = radius;
-            }
-            NodeAction::Wait { duration } => {
-                self.storage().state.context_get_mut(id).waiting_until =
-                    Some(Instant::now() + duration);
-            }
-        }
     }
 }

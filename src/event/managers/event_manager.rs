@@ -236,7 +236,8 @@ impl EventManager {
         for target in destruction_queue {
             self.lifecycle_manager.handle_destruction(*target);
         }
-        for target in context.storage().tree.get_nodes_id() {
+        // optimizar!!!!
+        for target in context.storage().get_nodes() {
             if creation_queue.contains(&target) || destruction_queue.contains(&target) {
                 continue;
             }
@@ -282,7 +283,7 @@ impl EventManager {
         let mut result: Vec<NodeID> = Vec::new();
         let mut max_layer: usize = 0;
 
-        for id in context.storage().tree.get_nodes_id() {
+        for id in context.storage().get_nodes() {
             let mut node = context
                 .get_node(id)
                 .expect("Invariant violated: node tree contains an invalid ID.");
@@ -310,13 +311,13 @@ impl EventManager {
             let node_layer_1 = context
                 .storage()
                 .transform
-                .context_get(*node_id_1)
+                .get_unchecked(*node_id_1)
                 .layer
                 .unwrap_or(0);
             let node_layer_2 = context
                 .storage()
                 .transform
-                .context_get(*node_id_2)
+                .get_unchecked(*node_id_2)
                 .layer
                 .unwrap_or(0);
 
@@ -481,7 +482,7 @@ impl EventManager {
         }
     }
     fn dispatch_all_nodes(&mut self, event_type: EventType, context: &mut EventContext) {
-        for node_id in context.get_nodes_id() {
+        for node_id in context.get_nodes() {
             self.dispatch_node(event_type, context, node_id);
         }
     }

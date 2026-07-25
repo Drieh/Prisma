@@ -35,6 +35,9 @@ impl CloseHandler {
         {
             self.quitting = true;
             event_manager.send_quit();
+            for id in context.get_nodes() {
+                context.destroy(id);
+            }
         }
         if context.is_cancel_close_requested() {
             self.close_request = None;
@@ -43,15 +46,53 @@ impl CloseHandler {
     }
 }
 
+struct PendingNodesHandler {
+    created: Vec<NodeID>,
+    destroyed: Vec<NodeID>,
+}
+impl PendingNodesHandler {
+    pub fn new() -> Self {
+        Self {
+            created: Vec::new(),
+            destroyed: Vec::new(),
+        }
+    }
+
+    pub fn extend_pending(&mut self, context: &mut EventContext) {
+        self.created.extend(context.take_created_nodes());
+        self.destroyed.extend(context.take_destroyed_nodes());
+    }
+
+    pub fn take_created(&mut self) -> Vec<NodeID> {
+        std::mem::take(&mut self.created)
+    }
+
+    pub fn take_destroyed(&mut self) -> Vec<NodeID> {
+        std::mem::take(&mut self.destroyed)
+    }
+
+    pub fn push_created(&mut self, id: NodeID) {
+        self.created.push(id);
+    }
+
+    pub fn push_destroyed(&mut self, id: NodeID) {
+        self.destroyed.push(id);
+    }
+
+    pub fn created_contains(&self, id: NodeID) -> bool {
+        self.created.contains(&id)
+    }
+
+    pub fn destroyed_contains(&self, id: NodeID) -> bool {
+        self.destroyed.contains(&id)
+    }
+}
+
 pub struct Scene {
     pub color: Color,
-
     nodes: NodeStorage,
-
-    pending_created_nodes: Vec<NodeID>,
-    pending_destroyed_nodes: Vec<NodeID>,
-
     event_manager: EventManager,
+    pending_nodes_handler: PendingNodesHandler,
     close_handler: CloseHandler,
 }
 
@@ -59,21 +100,16 @@ impl Scene {
     pub fn new() -> Self {
         Self {
             color: Color::RGB(255, 255, 255),
-
             nodes: NodeStorage::new(),
-
-            pending_created_nodes: Vec::new(),
-            pending_destroyed_nodes: Vec::new(),
-
             event_manager: EventManager::new(),
-
+            pending_nodes_handler: PendingNodesHandler::new(),
             close_handler: CloseHandler::new(),
         }
     }
 
     pub fn new_node(&mut self) -> NodeView<'_> {
         let new_node = self.nodes.new_node();
-        self.pending_created_nodes.push(new_node.get_id());
+        self.pending_nodes_handler.push_created(new_node.get_id());
         new_node
     }
 
@@ -89,14 +125,14 @@ impl Scene {
         self.nodes.get_node(id)
     }
 
-    pub fn on<F>(&mut self, event_type: EventType, callback: F)
+    pub fn on_event<F>(&mut self, event_type: EventType, callback: F)
     where
         F: FnMut(&mut EventContext) + 'static,
     {
         self.event_manager
             .add_scene_event_listener(event_type, callback);
     }
-    pub fn off(&mut self, target: CallbackID) {
+    pub fn off_event(&mut self, target: CallbackID) {
         self.event_manager.remove_event_listener(target);
     }
 
@@ -112,8 +148,8 @@ impl Scene {
         self.process_nodes();
 
         let mut context = EventContext::new(&mut self.nodes);
-        let pending_created_nodes = std::mem::take(&mut self.pending_created_nodes);
-        let pending_destroyed_nodes = std::mem::take(&mut self.pending_destroyed_nodes);
+        let pending_created_nodes = self.pending_nodes_handler.take_created();
+        let pending_destroyed_nodes = self.pending_nodes_handler.take_destroyed();
 
         self.event_manager.manage_lifecycle_events(
             &mut context,
@@ -123,14 +159,10 @@ impl Scene {
 
         self.event_manager.dispatch(&mut context);
 
-        //context.process_node_actions(&mut self.event_manager)?;
         context.process_context_actions(&mut self.event_manager)?;
 
         // for next frame
-        self.pending_created_nodes
-            .extend(context.take_created_nodes());
-        self.pending_destroyed_nodes
-            .extend(context.take_destroyed_nodes());
+        self.pending_nodes_handler.extend_pending(&mut context);
 
         // usan context
         self.close_handler
@@ -156,10 +188,7 @@ impl Scene {
         //context.process_node_actions(&mut self.event_manager)?;
         context.process_context_actions(&mut self.event_manager)?;
 
-        self.pending_created_nodes
-            .extend(context.take_created_nodes());
-        self.pending_destroyed_nodes
-            .extend(context.take_destroyed_nodes());
+        self.pending_nodes_handler.extend_pending(&mut context);
 
         self.close_handler
             .handle_close(&mut context, &mut self.event_manager);
@@ -186,15 +215,20 @@ impl Scene {
             }
             if self
                 .nodes
-                .get_handler()
+                .storage()
                 .state
-                .context_get(id)
+                .get_unchecked(id)
                 .destruction_requested
             {
-                let family = self.nodes.get_handler().tree.get_family(id).unwrap();
+                let family = self
+                    .nodes
+                    .storage()
+                    .tree
+                    .get_family(id)
+                    .expect("Invariant violation: nodes contains an invalid ID");
                 for familiar in family {
-                    if !self.pending_destroyed_nodes.contains(&familiar) {
-                        self.pending_destroyed_nodes.push(familiar);
+                    if !self.pending_nodes_handler.destroyed_contains(familiar) {
+                        self.pending_nodes_handler.push_destroyed(familiar);
                     }
                 }
             }
@@ -203,9 +237,9 @@ impl Scene {
 
             for action in self
                 .nodes
-                .get_handler()
+                .storage()
                 .state
-                .context_get_mut(id)
+                .get_unchecked_mut(id)
                 .og_state
                 .clone()
                 .values()
@@ -217,9 +251,9 @@ impl Scene {
             if is_hovered {
                 for action in self
                     .nodes
-                    .get_handler()
+                    .storage()
                     .state
-                    .context_get_mut(id)
+                    .get_unchecked_mut(id)
                     .on_hover
                     .clone()
                     .values()
@@ -232,9 +266,9 @@ impl Scene {
             if is_active {
                 for action in self
                     .nodes
-                    .get_handler()
+                    .storage()
                     .state
-                    .context_get_mut(id)
+                    .get_unchecked_mut(id)
                     .on_active
                     .clone()
                     .values()
@@ -246,31 +280,31 @@ impl Scene {
             }
             if let Some(until) = self
                 .nodes
-                .get_handler()
+                .storage()
                 .state
-                .context_get_mut(id)
+                .get_unchecked_mut(id)
                 .waiting_until
             {
                 if Instant::now() < until {
                     return;
                 }
                 self.nodes
-                    .get_handler()
+                    .storage()
                     .state
-                    .context_get_mut(id)
+                    .get_unchecked_mut(id)
                     .waiting_until = None;
             }
             if let Some(action) = self
                 .nodes
-                .get_handler()
+                .storage()
                 .action_queue
-                .context_get_mut(id)
+                .get_unchecked_mut(id)
                 .pop_front()
             {
                 self.nodes
-                    .get_handler()
+                    .storage()
                     .state
-                    .context_get_mut(id)
+                    .get_unchecked_mut(id)
                     .og_state
                     .insert(action.get_type(), action);
                 if action.get_type() == NodeActionType::Wait {
@@ -285,44 +319,44 @@ impl Scene {
             NodeAction::Position { position, absolute } => {
                 if let Some(value) = position {
                     self.nodes
-                        .get_handler()
+                        .storage()
                         .transform
-                        .context_get_mut(id)
+                        .get_unchecked_mut(id)
                         .position = value;
                 }
                 if let Some(value) = absolute {
                     self.nodes
-                        .get_handler()
+                        .storage()
                         .transform
-                        .context_get_mut(id)
+                        .get_unchecked_mut(id)
                         .position_absolute = value;
                 }
             }
 
             NodeAction::Size { width, height } => {
-                self.nodes.get_handler().style.context_get_mut(id).size = (width, height);
+                self.nodes.storage().style.get_unchecked_mut(id).size = (width, height);
             }
             NodeAction::Scale { x, y } => {
-                self.nodes.get_handler().transform.context_get_mut(id).scale = (x, y);
+                self.nodes.storage().transform.get_unchecked_mut(id).scale = (x, y);
             }
             NodeAction::BGColor { color } => {
-                self.nodes.get_handler().style.context_get_mut(id).color = color;
+                self.nodes.storage().style.get_unchecked_mut(id).color = color;
             }
             NodeAction::Layer { layer } => {
-                self.nodes.get_handler().transform.context_get_mut(id).layer = Some(layer);
+                self.nodes.storage().transform.get_unchecked_mut(id).layer = Some(layer);
             }
             NodeAction::BorderRadius { radius } => {
                 self.nodes
-                    .get_handler()
+                    .storage()
                     .style
-                    .context_get_mut(id)
+                    .get_unchecked_mut(id)
                     .border_radius = radius;
             }
             NodeAction::Wait { duration } => {
                 self.nodes
-                    .get_handler()
+                    .storage()
                     .state
-                    .context_get_mut(id)
+                    .get_unchecked_mut(id)
                     .waiting_until = Some(Instant::now() + duration);
             }
         }

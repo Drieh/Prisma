@@ -20,24 +20,24 @@ impl<'a> ListenerQueueHandler<'a> {
         self.storage.contains_key(&id)
     }
 
-    pub(crate) fn context_get(&self, id: NodeID) -> &ListenerQueue {
+    pub(crate) fn get_unchecked(&self, id: NodeID) -> &ListenerQueue {
         self.storage.get(&id).expect("Node component not found!")
     }
 
-    pub(crate) fn context_get_mut(&mut self, id: NodeID) -> &mut ListenerQueue {
+    pub(crate) fn get_unchecked_mut(&mut self, id: NodeID) -> &mut ListenerQueue {
         self.storage
             .get_mut(&id)
             .expect("Node component not found!")
     }
 
-    pub(crate) fn context_insert(&mut self, id: NodeID) {
+    pub(crate) fn insert(&mut self, id: NodeID) {
         if self.contains(id) {
             panic!("Node component already exists!");
         }
-        self.storage.entry(id).insert_entry(Vec::new());
+        self.storage.insert(id, Vec::new());
     }
 
-    pub(crate) fn context_remove(&mut self, id: NodeID) {
+    pub(crate) fn remove(&mut self, id: NodeID) {
         self.storage.remove(&id).expect("Node component not found!");
     }
 }

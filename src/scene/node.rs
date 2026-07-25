@@ -1,8 +1,7 @@
 use crate::{
     event::{EventContext, EventType, managers::event_manager::CallbackID},
-    util::Position,
+    util::{Color, Position},
 };
-use sdl3::pixels::Color;
 use std::{fmt::Display, sync::atomic::AtomicU32, sync::atomic::Ordering, time::Duration};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]

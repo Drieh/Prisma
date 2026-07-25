@@ -1,7 +1,3 @@
-use std::{any::Any, collections::VecDeque, time::Duration};
-
-use sdl3::pixels::Color;
-
 use crate::{
     app::PrismaError,
     event::{EventContext, EventType, managers::event_manager::CallbackID},
@@ -11,19 +7,20 @@ use crate::{
         node::NodeListenerAction,
         storage::StorageHandler,
     },
-    util::Position,
+    util::{Color, Position},
 };
+use std::{any::Any, collections::VecDeque, time::Duration};
 
 pub struct NodeView<'a> {
     id: NodeID,
     storage: StorageHandler<'a>,
 }
 impl<'a> NodeView<'a> {
-    pub fn new(id: NodeID, nodes: &'a mut NodeStorage) -> Result<Self, PrismaError> {
+    pub(crate) fn new(id: NodeID, nodes: &'a mut NodeStorage) -> Result<Self, PrismaError> {
         if nodes.exists(id) {
             Ok(Self {
                 id,
-                storage: nodes.get_handler(),
+                storage: nodes.storage(),
             })
         } else {
             Err(PrismaError::NodeNotFound(id))
@@ -44,32 +41,32 @@ impl<'a> NodeView<'a> {
         self.storage.transform.get(self.id).unwrap()
     }
     pub fn get_node_state(&self) -> &NodeState {
-        self.storage.state.context_get(self.id)
+        self.storage.state.get_unchecked(self.id)
     }
     pub fn get_action_queue(&self) -> &VecDeque<NodeAction> {
-        self.storage.action_queue.context_get(self.id)
+        self.storage.action_queue.get_unchecked(self.id)
     }
     pub fn get_listener_action_queue(&self) -> &Vec<NodeListenerAction> {
-        self.storage.listener_queue.context_get(self.id)
+        self.storage.listener_queue.get_unchecked(self.id)
     }
 
     pub(crate) fn get_tree_mut(&mut self) -> &mut TreeNode {
-        self.storage.tree.context_get_mut(self.id)
+        self.storage.tree.get_unchecked_mut(self.id)
     }
     pub(crate) fn get_style_mut(&mut self) -> &mut Style {
-        self.storage.style.context_get_mut(self.id)
+        self.storage.style.get_unchecked_mut(self.id)
     }
     pub(crate) fn get_transform_mut(&mut self) -> &mut Transform {
-        self.storage.transform.context_get_mut(self.id)
+        self.storage.transform.get_unchecked_mut(self.id)
     }
     pub(crate) fn get_node_state_mut(&mut self) -> &mut NodeState {
-        self.storage.state.context_get_mut(self.id)
+        self.storage.state.get_unchecked_mut(self.id)
     }
     pub(crate) fn get_action_queue_mut(&mut self) -> &mut VecDeque<NodeAction> {
-        self.storage.action_queue.context_get_mut(self.id)
+        self.storage.action_queue.get_unchecked_mut(self.id)
     }
     pub(crate) fn get_listener_action_queue_mut(&mut self) -> &mut Vec<NodeListenerAction> {
-        self.storage.listener_queue.context_get_mut(self.id)
+        self.storage.listener_queue.get_unchecked_mut(self.id)
     }
 
     // states
@@ -105,17 +102,17 @@ impl<'a> NodeView<'a> {
             return Err(PrismaError::NodeNotFound(child_id));
         }
         if self.id == child_id {
-            return Err(PrismaError::InvalidTreeState((self.id, child_id)));
+            return Err(PrismaError::InvalidTree((self.id, child_id)));
         }
         if let Some(parent) = self.get_parent()
             && parent == child_id
         {
-            return Err(PrismaError::InvalidTreeState((self.id, child_id)));
+            return Err(PrismaError::InvalidTree((self.id, child_id)));
         }
         let self_id = self.id;
         self.storage
             .tree
-            .context_get_mut(child_id)
+            .get_unchecked_mut(child_id)
             .set_parent(Some(self_id));
         self.get_tree_mut().add_child(child_id);
         Ok(self)
@@ -126,7 +123,10 @@ impl<'a> NodeView<'a> {
             return Err(PrismaError::NodeNotFound(child_id));
         }
         self.get_tree_mut().remove_child(child_id);
-        self.storage.tree.context_get_mut(child_id).set_parent(None);
+        self.storage
+            .tree
+            .get_unchecked_mut(child_id)
+            .set_parent(None);
 
         Ok(self)
     }
@@ -137,13 +137,6 @@ impl<'a> NodeView<'a> {
 
     pub fn get_children(&self) -> Vec<NodeID> {
         self.get_tree().get_children()
-    }
-
-    pub fn get_family(&mut self, target: NodeID, output: &mut Vec<NodeID>) {
-        output.push(target);
-        for child_id in self.get_children() {
-            self.get_family(child_id, output);
-        }
     }
 
     pub fn get_bouding_box_size(&self) -> (u32, u32) {
@@ -169,9 +162,9 @@ impl<'a> NodeView<'a> {
         if !self.storage.has_node(id) {
             return Err(PrismaError::NodeNotFound(id));
         }
-        let self_transform = self.storage.transform.context_get(id).clone();
+        let self_transform = self.storage.transform.get_unchecked(id).clone();
         if !self_transform.position_absolute
-            && let tree = self.storage.tree.context_get(id).clone()
+            && let tree = self.storage.tree.get_unchecked(id).clone()
             && let Some(parent) = tree.get_parent()
         {
             Ok(self.world_position(parent)? + self_transform.position)
@@ -209,11 +202,6 @@ impl<'a> NodeView<'a> {
         self
     }
 
-    pub fn push_action(&mut self, action: NodeAction) -> &mut Self {
-        self.get_action_queue_mut().push_back(action);
-        self
-    }
-
     pub fn scale(&mut self, x: f32, y: f32) -> &mut Self {
         self.get_action_queue_mut()
             .push_back(NodeAction::Scale { x, y });
@@ -226,10 +214,9 @@ impl<'a> NodeView<'a> {
         self
     }
 
-    pub fn bg_color(&mut self, r: u8, g: u8, b: u8, a: u8) -> &mut Self {
-        self.get_action_queue_mut().push_back(NodeAction::BGColor {
-            color: Color { r, g, b, a },
-        });
+    pub fn bg_color(&mut self, color: Color) -> &mut Self {
+        self.get_action_queue_mut()
+            .push_back(NodeAction::BGColor { color });
         self
     }
 
@@ -270,7 +257,7 @@ impl<'a> NodeView<'a> {
         self
     }
 
-    pub fn on_active(&mut self, actions: &[NodeAction]) -> &mut Self {
+    pub fn active(&mut self, actions: &[NodeAction]) -> &mut Self {
         for action in actions {
             self.get_node_state_mut()
                 .on_active
@@ -279,7 +266,7 @@ impl<'a> NodeView<'a> {
         self
     }
 
-    pub fn on_hover(&mut self, actions: &[NodeAction]) -> &mut Self {
+    pub fn hover(&mut self, actions: &[NodeAction]) -> &mut Self {
         for action in actions {
             self.get_node_state_mut()
                 .on_hover

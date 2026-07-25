@@ -20,8 +20,8 @@ impl<'a> TreeHandler<'a> {
             .ok_or(PrismaError::NodeComponentNotFound(id))
     }
 
-    pub fn get_nodes_id(&self) -> Vec<NodeID> {
-        self.storage.keys().copied().collect()
+    pub(crate) fn get_nodes(&self) -> Vec<NodeID> {
+        self.storage.keys().cloned().collect()
     }
 
     pub fn get_family(&self, id: NodeID) -> Result<Vec<NodeID>, PrismaError> {
@@ -47,24 +47,24 @@ impl<'a> TreeHandler<'a> {
         self.storage.contains_key(&id)
     }
 
-    pub(crate) fn context_get(&self, id: NodeID) -> &TreeNode {
+    pub(crate) fn get_unchecked(&self, id: NodeID) -> &TreeNode {
         self.storage.get(&id).expect("Node component not found!")
     }
 
-    pub(crate) fn context_get_mut(&mut self, id: NodeID) -> &mut TreeNode {
+    pub(crate) fn get_unchecked_mut(&mut self, id: NodeID) -> &mut TreeNode {
         self.storage
             .get_mut(&id)
             .expect("Node component not found!")
     }
 
-    pub(crate) fn context_insert(&mut self, id: NodeID) {
+    pub(crate) fn insert(&mut self, id: NodeID) {
         if self.contains(id) {
             panic!("Node component already exists!");
         }
-        self.storage.entry(id).insert_entry(TreeNode::new(id));
+        self.storage.insert(id, TreeNode::new(id));
     }
 
-    pub(crate) fn context_remove(&mut self, id: NodeID) {
+    pub(crate) fn remove(&mut self, id: NodeID) {
         self.storage.remove(&id).expect("Node component not found!");
     }
 }

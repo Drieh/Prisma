@@ -29,25 +29,25 @@ impl<'a> StorageHandler<'a> {
         }
     }
 
-    pub fn get_nodes_id(&self) -> Vec<NodeID> {
-        self.tree.get_nodes_id()
+    pub fn get_nodes(&self) -> Vec<NodeID> {
+        self.tree.get_nodes()
     }
 
-    pub(crate) fn context_insert(&mut self, id: NodeID) {
-        self.action_queue.context_insert(id);
-        self.listener_queue.context_insert(id);
-        self.state.context_insert(id);
-        self.style.context_insert(id);
-        self.transform.context_insert(id);
-        self.tree.context_insert(id);
+    pub(crate) fn insert_context(&mut self, id: NodeID) {
+        self.action_queue.insert(id);
+        self.listener_queue.insert(id);
+        self.state.insert(id);
+        self.style.insert(id);
+        self.transform.insert(id);
+        self.tree.insert(id);
     }
 
-    pub(crate) fn context_remove(&mut self, id: NodeID) {
-        self.action_queue.context_remove(id);
-        self.listener_queue.context_remove(id);
-        self.state.context_remove(id);
-        self.style.context_remove(id);
-        self.transform.context_remove(id);
-        self.tree.context_remove(id);
+    pub(crate) fn remove_context(&mut self, id: NodeID) {
+        self.action_queue.remove(id);
+        self.listener_queue.remove(id);
+        self.state.remove(id);
+        self.style.remove(id);
+        self.transform.remove(id);
+        self.tree.remove(id);
     }
 }

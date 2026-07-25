@@ -33,24 +33,24 @@ impl<'a> StateHandler<'a> {
         self.storage.contains_key(&id)
     }
 
-    pub(crate) fn context_get(&self, id: NodeID) -> &NodeState {
+    pub(crate) fn get_unchecked(&self, id: NodeID) -> &NodeState {
         self.storage.get(&id).expect("Node component not found!")
     }
 
-    pub(crate) fn context_get_mut(&mut self, id: NodeID) -> &mut NodeState {
+    pub(crate) fn get_unchecked_mut(&mut self, id: NodeID) -> &mut NodeState {
         self.storage
             .get_mut(&id)
             .expect("Node component not found!")
     }
 
-    pub(crate) fn context_insert(&mut self, id: NodeID) {
+    pub(crate) fn insert(&mut self, id: NodeID) {
         if self.contains(id) {
             panic!("Node component already exists!");
         }
-        self.storage.entry(id).insert_entry(NodeState::new(id));
+        self.storage.insert(id, NodeState::new(id));
     }
 
-    pub(crate) fn context_remove(&mut self, id: NodeID) {
+    pub(crate) fn remove(&mut self, id: NodeID) {
         self.storage.remove(&id).expect("Node component not found!");
     }
 }

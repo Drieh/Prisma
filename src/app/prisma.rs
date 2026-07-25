@@ -3,7 +3,7 @@ use std::{
     time::{Duration, Instant},
 };
 
-use sdl3::{VideoSubsystem, render::Canvas, video::WindowFlags};
+use sdl3::{VideoSubsystem, video::WindowFlags};
 
 use crate::render::Renderer;
 use crate::{app::PrismaError, scene::Scene};
@@ -19,8 +19,7 @@ impl AppWindow {
         builder: WindowBuilder,
         scene: Scene,
     ) -> Result<Self, PrismaError> {
-        let mut binding =
-            video_subsystem.window(&builder.title.into_string(), builder.width, builder.height);
+        let mut binding = video_subsystem.window(&builder.title, builder.width, builder.height);
 
         let mut window_builder: &mut sdl3::video::WindowBuilder = binding.set_flags(builder.flags);
 
@@ -47,7 +46,7 @@ impl AppWindow {
     }
 }
 pub struct WindowBuilder {
-    pub title: Box<str>,
+    pub title: String,
     pub flags: WindowFlags,
     pub width: u32,
     pub height: u32,
@@ -58,7 +57,7 @@ pub struct WindowBuilder {
 impl WindowBuilder {
     pub fn new(title: &str) -> Self {
         Self {
-            title: title.into(),
+            title: title.to_string(),
             flags: WindowFlags::empty(),
             x: 0,
             y: 0,
@@ -67,7 +66,7 @@ impl WindowBuilder {
             height: 100,
         }
     }
-    //pub fn build(self) -> sdl3::video::Window {}
+
     pub fn size(mut self, width: u32, height: u32) -> Self {
         self.width = width;
         self.height = height;
@@ -103,10 +102,6 @@ impl WindowBuilder {
     /*
     pub fn high_pixel_density(mut self) -> Self {
         self.builder.high_pixel_density();
-        self
-    }
-    pub fn position_centered(mut self) -> Self {
-        self.builder.position_centered();
         self
     }
     pub fn metal_view(mut self) -> Self {
@@ -147,9 +142,6 @@ pub struct Prisma {
     windows_close_queue: Vec<u32>,
 }
 impl Prisma {
-    /**
-     * Returns a
-     */
     pub fn builder() -> Result<AppBuilder, PrismaError> {
         let sdl_context = sdl3::init().map_err(|e| PrismaError::InitError(e.to_string()))?;
 

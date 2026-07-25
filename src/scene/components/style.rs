@@ -1,4 +1,4 @@
-use sdl3::pixels::Color;
+use crate::util::Color;
 
 #[derive(Debug, Clone, Copy)]
 pub struct Style {
@@ -9,7 +9,7 @@ pub struct Style {
 
 impl Style {
     pub fn new() -> Self {
-        let color = Color::RGBA(0, 0, 0, 0);
+        let color = Color::rgba(0, 0, 0, 0);
 
         Self {
             color,

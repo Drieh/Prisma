@@ -5,7 +5,7 @@ use crate::scene::NodeID;
 #[derive(Debug)]
 pub enum PrismaError {
     InitError(String),
-    InvalidTreeState((NodeID, NodeID)),
+    InvalidTree((NodeID, NodeID)),
     NodeStateNotFound((NodeID, String)),
     NodeComponentNotFound(NodeID),
     NodeNotFound(NodeID),
@@ -29,7 +29,7 @@ impl fmt::Display for PrismaError {
             PrismaError::NodeComponentNotFound(id) => {
                 write!(f, "Component not found for node: {id}")
             }
-            PrismaError::InvalidTreeState((parent, child)) => {
+            PrismaError::InvalidTree((parent, child)) => {
                 write!(f, "Invalid tree for parent {parent} and child {child}")
             }
         }

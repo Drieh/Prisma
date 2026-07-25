@@ -15,7 +15,7 @@ A simple UI framework for Rust built on SDL3.
 
 ```toml
 [dependencies]
-prisma = "0.1.0"
+prismae = "0.1.0"
 ```
 
 ## Example

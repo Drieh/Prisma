@@ -4,7 +4,7 @@ use crate::{
     scene::{NodeID, Scene, components::Transform},
     util::Position,
 };
-use sdl3::{rect::Point, render::Canvas, video::Window};
+use sdl3::{pixels::Color as SdlColor, rect::Point, render::Canvas, video::Window};
 
 pub struct Renderer {
     canvas: Canvas<Window>,
@@ -75,7 +75,13 @@ impl Renderer {
             position: world_position,
             ..node_transform
         };
-        self.canvas.set_draw_color(node.get_style().color);
+        let color = node.get_style().color;
+        self.canvas.set_draw_color(SdlColor {
+            r: color.r,
+            g: color.g,
+            b: color.b,
+            a: color.a,
+        });
 
         let (width, height) = node.get_bouding_box_size();
         let position = draw_transform.position;
@@ -178,16 +184,6 @@ impl Renderer {
         }
         let m = (p2.y - p1.y) as f32 / dx as f32;
         (m * (x - p1.x) as f32 + p1.y as f32).round() as i32
-    }
-
-    fn oval_top_arc(&self, x: i32, radius_x: u32, radius_y: u32, center: Position) -> f32 {
-        let x = x as f32 - center.x;
-        let y = radius_y as f32
-            * (1.0 - (x * x) as f32 / (radius_x * radius_x) as f32)
-                .max(0.0)
-                .sqrt();
-
-        y + center.y
     }
 
     /// Doesn's include center.y
