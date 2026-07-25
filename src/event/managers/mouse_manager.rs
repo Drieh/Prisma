@@ -2,7 +2,7 @@ use sdl3::event::Event as SdlEvent;
 use sdl3::mouse::MouseButton as SdlMouseButton;
 use std::collections::{HashMap, HashSet};
 
-use crate::common::Position;
+use crate::util::Position;
 
 #[derive(Hash, Eq, PartialEq, Clone, Copy, Debug)]
 pub enum MouseButton {
@@ -16,15 +16,15 @@ pub enum MouseButton {
 
 #[derive(Hash, Eq, PartialEq, Clone, Copy, Debug)]
 pub enum MouseEventType {
-    Move,
-    Down,
-    Up,
+    MouseMove,
+    MouseDown,
+    MouseUp,
     Click,
     DragStart,
     Drag,
     DragEnd,
-    Hover,
-    Active,
+    Enter,
+    Leave,
 }
 #[derive(Clone, Copy, Debug)]
 pub enum MouseEvent {
@@ -62,17 +62,27 @@ pub enum MouseEvent {
         y: f32,
         mouse_btn: MouseButton,
     },
+    Enter {
+        x: f32,
+        y: f32,
+    },
+    Leave {
+        x: f32,
+        y: f32,
+    },
 }
 impl MouseEvent {
-    pub fn event_type(&self) -> MouseEventType {
+    pub fn get_type(&self) -> MouseEventType {
         match self {
-            MouseEvent::MouseMove { .. } => MouseEventType::Move,
-            MouseEvent::MouseDown { .. } => MouseEventType::Down,
-            MouseEvent::MouseUp { .. } => MouseEventType::Up,
+            MouseEvent::MouseMove { .. } => MouseEventType::MouseMove,
+            MouseEvent::MouseDown { .. } => MouseEventType::MouseDown,
+            MouseEvent::MouseUp { .. } => MouseEventType::MouseUp,
             MouseEvent::Click { .. } => MouseEventType::Click,
             MouseEvent::DragStart { .. } => MouseEventType::DragStart,
             MouseEvent::Drag { .. } => MouseEventType::Drag,
             MouseEvent::DragEnd { .. } => MouseEventType::DragEnd,
+            MouseEvent::Enter { .. } => MouseEventType::Enter,
+            MouseEvent::Leave { .. } => MouseEventType::Leave,
         }
     }
 }
@@ -140,8 +150,6 @@ impl MouseManager {
                 ..
             } => {
                 let mouse_btn = self.match_sdl_mouse_button(sdl_mouse_btn);
-                self.queue.push(MouseEvent::MouseUp { x, y, mouse_btn });
-                self.position = Position { x, y };
 
                 if self.is_dragging.contains(&mouse_btn) {
                     self.queue.push(MouseEvent::DragEnd { x, y, mouse_btn });
@@ -150,6 +158,9 @@ impl MouseManager {
                 }
                 self.is_dragging.remove(&mouse_btn);
                 self.last_down_position.remove(&mouse_btn);
+
+                self.queue.push(MouseEvent::MouseUp { x, y, mouse_btn });
+                self.position = Position { x, y };
             }
 
             SdlEvent::MouseMotion { x, y, .. } => {

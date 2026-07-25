@@ -2,9 +2,8 @@ pub(crate) mod context;
 pub(crate) mod managers;
 
 pub(crate) use context::EventContext;
+pub(crate) use managers::event_manager::Callback;
 pub(crate) use managers::event_manager::EventManager;
-pub(crate) use managers::event_manager::NodeCallback;
-pub(crate) use managers::event_manager::SceneCallback;
 
 pub use managers::event_manager::Event;
 pub use managers::event_manager::EventType;

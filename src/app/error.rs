@@ -1,11 +1,13 @@
-use std::fmt;
+use std::fmt::{self, write};
 
 use crate::scene::NodeID;
 
 #[derive(Debug)]
 pub enum PrismaError {
     InitError(String),
-    NodeStateNotFound(String),
+    InvalidTreeState((NodeID, NodeID)),
+    NodeStateNotFound((NodeID, String)),
+    NodeComponentNotFound(NodeID),
     NodeNotFound(NodeID),
     RenderError(String),
 }
@@ -21,8 +23,14 @@ impl fmt::Display for PrismaError {
             PrismaError::NodeNotFound(id) => {
                 write!(f, "Node {id} not found")
             }
-            PrismaError::NodeStateNotFound(key) => {
-                write!(f, "Node state {key} not found")
+            PrismaError::NodeStateNotFound((id, key)) => {
+                write!(f, "State {key} not found for node {id}")
+            }
+            PrismaError::NodeComponentNotFound(id) => {
+                write!(f, "Component not found for node: {id}")
+            }
+            PrismaError::InvalidTreeState((parent, child)) => {
+                write!(f, "Invalid tree for parent {parent} and child {child}")
             }
         }
     }

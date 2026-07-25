@@ -1,96 +1,102 @@
+use std::time::Instant;
+
 use crate::app::PrismaError;
-use crate::event::context::ContextAction;
+use crate::event::context::CloseRequest;
 use crate::event::context::EventContext;
-use crate::event::managers::event_manager::CloseRequest;
-use crate::event::managers::event_manager::EventListenerID;
-use crate::event::{EventManager, EventType, SceneCallback};
-use crate::scene::Node;
+use crate::event::managers::event_manager::CallbackID;
+use crate::event::{EventManager, EventType};
+use crate::scene::NodeAction;
+use crate::scene::NodeActionType;
 use crate::scene::NodeID;
-use crate::scene::node::EventListenerAction;
+use crate::scene::node::NodeListenerAction;
+use crate::scene::node_storage::NodeStorage;
+use crate::scene::node_view::NodeView;
 use sdl3::pixels::Color;
 
-use std::collections::HashMap;
+struct CloseHandler {
+    close_request: Option<CloseRequest>,
+    quitting: bool,
+}
+impl CloseHandler {
+    fn new() -> Self {
+        Self {
+            close_request: None,
+            quitting: false,
+        }
+    }
+
+    fn handle_close(&mut self, context: &mut EventContext, event_manager: &mut EventManager) {
+        if let Some(close_request) = context.close_request {
+            self.close_request = Some(close_request);
+            event_manager.send_close_request(close_request);
+        }
+        if let Some(close_request) = self.close_request
+            && close_request.requested_at.elapsed() >= close_request.duration
+        {
+            self.quitting = true;
+            event_manager.send_quit();
+        }
+        if context.is_cancel_close_requested() {
+            self.close_request = None;
+            event_manager.cancel_close();
+        }
+    }
+}
 
 pub struct Scene {
     pub color: Color,
 
-    nodes: HashMap<NodeID, Node>,
+    nodes: NodeStorage,
 
     pending_created_nodes: Vec<NodeID>,
+    pending_destroyed_nodes: Vec<NodeID>,
 
     event_manager: EventManager,
-    close_request: Option<CloseRequest>,
-    //cancel_close_requested: bool,
-    quitting: bool,
+    close_handler: CloseHandler,
 }
 
 impl Scene {
     pub fn new() -> Self {
         Self {
             color: Color::RGB(255, 255, 255),
-            nodes: HashMap::new(),
+
+            nodes: NodeStorage::new(),
+
             pending_created_nodes: Vec::new(),
+            pending_destroyed_nodes: Vec::new(),
 
             event_manager: EventManager::new(),
 
-            close_request: None,
-            quitting: false,
+            close_handler: CloseHandler::new(),
         }
     }
 
-    pub fn new_node(&mut self) -> &mut Node {
-        let node = Node::new();
-        let id = node.id();
-
-        self.pending_created_nodes.push(id);
-        self.nodes.insert(id, node);
-
-        self.node(id).unwrap()
+    pub fn new_node(&mut self) -> NodeView<'_> {
+        let new_node = self.nodes.new_node();
+        self.pending_created_nodes.push(new_node.get_id());
+        new_node
     }
 
-    pub fn add_child(&mut self, parent_id: NodeID, child_id: NodeID) -> Result<(), PrismaError> {
-        let parent = self.node(parent_id)?;
-        parent.add_child(child_id);
-        let parent_transform = parent.get_transform().clone();
-
-        let child = self.node(child_id)?;
-        child.set_parent(Some(parent_id));
-
-        let child_transform = child.get_transform().clone();
-
-        child.get_transform_as_mut().position =
-            child_transform.position + parent_transform.position;
-
-        if child_transform.layer == None {
-            child.get_transform_as_mut().layer = parent_transform.layer
-        }
-        Ok(())
+    pub fn node_exists(&self, id: NodeID) -> bool {
+        self.nodes.exists(id)
     }
 
-    pub fn remove_child(&mut self, parent_id: NodeID, child_id: NodeID) -> Result<(), PrismaError> {
-        // This order ensures an error is returned if the child ID doesn't exist before removing it to the parent.
-        self.node(child_id)?.set_parent(None);
-        self.node(parent_id)?.remove_child(child_id);
-
-        Ok(())
+    pub fn get_nodes_id(&self) -> Vec<NodeID> {
+        self.nodes.get_nodes_id()
     }
 
-    pub fn node(&mut self, id: NodeID) -> Result<&mut Node, PrismaError> {
-        self.nodes.get_mut(&id).ok_or(PrismaError::NodeNotFound(id))
-    }
-    pub fn get_node(&self, id: NodeID) -> Result<&Node, PrismaError> {
-        self.nodes.get(&id).ok_or(PrismaError::NodeNotFound(id))
+    pub fn get_node(&mut self, id: NodeID) -> Result<NodeView<'_>, PrismaError> {
+        self.nodes.get_node(id)
     }
 
-    pub(crate) fn nodes(&self) -> &HashMap<NodeID, Node> {
-        &self.nodes
-    }
-
-    pub fn on(&mut self, event_type: EventType, callback: SceneCallback) {
+    pub fn on<F>(&mut self, event_type: EventType, callback: F)
+    where
+        F: FnMut(&mut EventContext) + 'static,
+    {
         self.event_manager
             .add_scene_event_listener(event_type, callback);
     }
-    pub fn off(&mut self, target: EventListenerID) {
+    pub fn off(&mut self, target: CallbackID) {
         self.event_manager.remove_event_listener(target);
     }
 
@@ -99,156 +105,226 @@ impl Scene {
     }
 
     pub fn is_quitting(&self) -> bool {
-        self.quitting
+        self.close_handler.quitting
     }
-    fn manage_close(&mut self) {
-        if let Some(close_request) = &self.close_request {
-            self.event_manager.send_close_request(*close_request);
 
-            if close_request.requested_at.elapsed() >= close_request.duration {
-                self.close_request = None;
-                self.quitting = true;
-                self.event_manager.send_quit();
-            }
-        }
-    }
-    fn manage_cancel_close(&mut self, context: &mut EventContext) {
-        if let Some(request) = context.close_request {
-            self.close_request = Some(request);
-        }
-        if context.is_cancel_close_requested() {
-            self.close_request = None;
-            self.event_manager.cancel_close();
-        }
-    }
-    pub(crate) fn manage_lifecycle(&mut self) -> Result<(), PrismaError> {
-        let mut context = EventContext::new();
+    pub(crate) fn manage_lifecycle_events(&mut self) -> Result<(), PrismaError> {
+        self.process_nodes();
 
-        self.process_node_listeners();
-
-        self.manage_close();
-
+        let mut context = EventContext::new(&mut self.nodes);
         let pending_created_nodes = std::mem::take(&mut self.pending_created_nodes);
+        let pending_destroyed_nodes = std::mem::take(&mut self.pending_destroyed_nodes);
 
-        let destruction_queue = self.build_node_destruction_queue();
-        self.event_manager
-            .poll_lifecycle_events(&destruction_queue, &pending_created_nodes);
+        self.event_manager.manage_lifecycle_events(
+            &mut context,
+            &pending_destroyed_nodes,
+            &pending_created_nodes,
+        );
 
-        self.event_manager.dispatch(&mut self.nodes, &mut context);
+        self.event_manager.dispatch(&mut context);
 
-        self.process_context_actions(&mut context)?;
-        self.process_node_actions();
-        self.manage_cancel_close(&mut context);
+        //context.process_node_actions(&mut self.event_manager)?;
+        context.process_context_actions(&mut self.event_manager)?;
 
-        for node_id in destruction_queue {
-            self.destroy_node(node_id)?;
+        // for next frame
+        self.pending_created_nodes
+            .extend(context.take_created_nodes());
+        self.pending_destroyed_nodes
+            .extend(context.take_destroyed_nodes());
+
+        // usan context
+        self.close_handler
+            .handle_close(&mut context, &mut self.event_manager);
+
+        for id in pending_destroyed_nodes {
+            self.event_manager.clear_node_listeners(id);
+            self.nodes.destroy_node(id)?;
         }
+        Ok(())
+    }
+
+    pub(crate) fn manage_sdl_events(
+        &mut self,
+        sdl_event: &sdl3::event::Event,
+    ) -> Result<(), PrismaError> {
+        let mut context = EventContext::new(&mut self.nodes);
+
+        self.event_manager.manage_sdl_event(sdl_event);
+
+        self.event_manager.dispatch(&mut context);
+
+        //context.process_node_actions(&mut self.event_manager)?;
+        context.process_context_actions(&mut self.event_manager)?;
+
+        self.pending_created_nodes
+            .extend(context.take_created_nodes());
+        self.pending_destroyed_nodes
+            .extend(context.take_destroyed_nodes());
+
+        self.close_handler
+            .handle_close(&mut context, &mut self.event_manager);
 
         Ok(())
     }
 
-    fn process_node_listeners(&mut self) {
-        for node in self.nodes.values_mut() {
-            for action in node.take_event_listener_actions() {
-                match action {
-                    EventListenerAction::Add {
+    fn process_nodes(&mut self) {
+        for id in self.nodes.get_nodes_id() {
+            let listener_actions = self.nodes.take_listener_queue(id);
+            for listener_action in listener_actions {
+                match listener_action {
+                    NodeListenerAction::Add {
                         event_type,
                         callback,
                     } => {
                         self.event_manager
-                            .add_node_event_listener(node.id(), event_type, callback);
+                            .add_node_event_listener(id, event_type, callback);
                     }
-                    EventListenerAction::Remove { target } => {
+                    NodeListenerAction::Remove { target } => {
                         self.event_manager.remove_event_listener(target);
                     }
                 }
             }
-        }
-    }
-
-    fn process_node_actions(&mut self) {
-        for node in self.nodes.values_mut() {
-            let id = node.id();
-            node.process_action_queue(
-                self.event_manager.is_node_hovered(id),
-                self.event_manager.is_node_active(id),
-            );
-        }
-    }
-
-    pub(crate) fn manage_sdl_event(
-        &mut self,
-        sdl_event: &sdl3::event::Event,
-    ) -> Result<(), PrismaError> {
-        let mut context = EventContext::new();
-
-        self.event_manager.manage_user_event(sdl_event);
-        self.event_manager.dispatch(&mut self.nodes, &mut context);
-
-        self.process_context_actions(&mut context)?;
-
-        self.manage_cancel_close(&mut context);
-        Ok(())
-    }
-
-    fn process_context_actions(&mut self, context: &mut EventContext) -> Result<(), PrismaError> {
-        let context_actions = context.take_actions();
-
-        for node in context.take_nodes() {
-            self.pending_created_nodes.push(node.id());
-            self.nodes.insert(node.id(), node);
-        }
-        for action in context_actions {
-            match action {
-                ContextAction::Destruction { target } => {
-                    self.node(target)?.destroy();
-                }
-                ContextAction::AddChild { parent, child } => {
-                    self.node(parent)?.add_child(child);
-                    self.node(child)?.set_parent(Some(parent));
-                }
-                ContextAction::RemoveChild { parent, child } => {
-                    self.node(parent)?.remove_child(child);
-                }
-
-                ContextAction::AddSceneEventListener {
-                    event_type,
-                    callback,
-                } => {
-                    self.on(event_type, callback);
-                }
-                ContextAction::RemoveSceneEventListener { target } => {
-                    self.off(target);
-                }
-            }
-        }
-        Ok(())
-    }
-
-    fn build_node_destruction_queue(&mut self) -> Vec<NodeID> {
-        let mut destruction_queue: Vec<NodeID> = Vec::new();
-        for node in self.nodes.values_mut() {
-            if node.is_destruction_requested() {
-                destruction_queue.push(node.id());
-                if node.get_children().len() > 0 {
-                    for child_id in node.get_children() {
-                        destruction_queue.push(child_id);
+            if self
+                .nodes
+                .get_handler()
+                .state
+                .context_get(id)
+                .destruction_requested
+            {
+                let family = self.nodes.get_handler().tree.get_family(id).unwrap();
+                for familiar in family {
+                    if !self.pending_destroyed_nodes.contains(&familiar) {
+                        self.pending_destroyed_nodes.push(familiar);
                     }
                 }
             }
-        }
-        destruction_queue
-    }
+            let is_hovered = self.event_manager.is_node_hovered(id);
+            let is_active = self.event_manager.is_node_active(id);
 
-    fn destroy_node(&mut self, node_id: NodeID) -> Result<(), PrismaError> {
-        let node = self.node(node_id)?;
-
-        if node.get_children().len() > 0 {
-            for child_id in node.get_children() {
-                self.destroy_node(child_id)?;
+            for action in self
+                .nodes
+                .get_handler()
+                .state
+                .context_get_mut(id)
+                .og_state
+                .clone()
+                .values()
+            {
+                if action.get_type() != NodeActionType::Wait {
+                    self.execute_node_action(id, *action);
+                }
+            }
+            if is_hovered {
+                for action in self
+                    .nodes
+                    .get_handler()
+                    .state
+                    .context_get_mut(id)
+                    .on_hover
+                    .clone()
+                    .values()
+                {
+                    if action.get_type() != NodeActionType::Wait {
+                        self.execute_node_action(id, *action);
+                    }
+                }
+            }
+            if is_active {
+                for action in self
+                    .nodes
+                    .get_handler()
+                    .state
+                    .context_get_mut(id)
+                    .on_active
+                    .clone()
+                    .values()
+                {
+                    if action.get_type() != NodeActionType::Wait {
+                        self.execute_node_action(id, *action);
+                    }
+                }
+            }
+            if let Some(until) = self
+                .nodes
+                .get_handler()
+                .state
+                .context_get_mut(id)
+                .waiting_until
+            {
+                if Instant::now() < until {
+                    return;
+                }
+                self.nodes
+                    .get_handler()
+                    .state
+                    .context_get_mut(id)
+                    .waiting_until = None;
+            }
+            if let Some(action) = self
+                .nodes
+                .get_handler()
+                .action_queue
+                .context_get_mut(id)
+                .pop_front()
+            {
+                self.nodes
+                    .get_handler()
+                    .state
+                    .context_get_mut(id)
+                    .og_state
+                    .insert(action.get_type(), action);
+                if action.get_type() == NodeActionType::Wait {
+                    self.execute_node_action(id, action);
+                }
             }
         }
-        self.nodes.remove(&node_id);
-        Ok(())
+    }
+
+    fn execute_node_action(&mut self, id: NodeID, action: NodeAction) {
+        match action {
+            NodeAction::Position { position, absolute } => {
+                if let Some(value) = position {
+                    self.nodes
+                        .get_handler()
+                        .transform
+                        .context_get_mut(id)
+                        .position = value;
+                }
+                if let Some(value) = absolute {
+                    self.nodes
+                        .get_handler()
+                        .transform
+                        .context_get_mut(id)
+                        .position_absolute = value;
+                }
+            }
+
+            NodeAction::Size { width, height } => {
+                self.nodes.get_handler().style.context_get_mut(id).size = (width, height);
+            }
+            NodeAction::Scale { x, y } => {
+                self.nodes.get_handler().transform.context_get_mut(id).scale = (x, y);
+            }
+            NodeAction::BGColor { color } => {
+                self.nodes.get_handler().style.context_get_mut(id).color = color;
+            }
+            NodeAction::Layer { layer } => {
+                self.nodes.get_handler().transform.context_get_mut(id).layer = Some(layer);
+            }
+            NodeAction::BorderRadius { radius } => {
+                self.nodes
+                    .get_handler()
+                    .style
+                    .context_get_mut(id)
+                    .border_radius = radius;
+            }
+            NodeAction::Wait { duration } => {
+                self.nodes
+                    .get_handler()
+                    .state
+                    .context_get_mut(id)
+                    .waiting_until = Some(Instant::now() + duration);
+            }
+        }
     }
 }

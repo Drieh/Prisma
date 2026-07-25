@@ -43,7 +43,7 @@ impl AppWindow {
     }
 
     pub fn draw(&mut self) {
-        self.renderer.draw(&self.scene);
+        self.renderer.draw(&mut self.scene);
     }
 }
 pub struct WindowBuilder {
@@ -168,21 +168,21 @@ impl Prisma {
             let frame_start = Instant::now();
             let windows_close_queue = std::mem::take(&mut self.windows_close_queue);
 
-            // life cycle events
             for app_window in self.windows.values_mut() {
                 app_window
                     .scene
-                    .manage_lifecycle()
+                    .manage_lifecycle_events()
                     .expect("Error in lifecycle");
             }
-            // sdl user events
+
+            // events
             for sdl_event in self.event_pump.poll_iter() {
                 for app_window in self.windows.values_mut() {
                     if let Some(window_id) = sdl_event.get_window_id() {
                         if window_id == app_window.id {
                             app_window
                                 .scene
-                                .manage_sdl_event(&sdl_event)
+                                .manage_sdl_events(&sdl_event)
                                 .expect("Error in user events");
                         }
                     }

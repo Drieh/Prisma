@@ -9,7 +9,7 @@ pub enum LifecycleEventType {
 
 #[derive(Hash, Eq, PartialEq, Clone, Copy, Debug)]
 pub enum LifecycleEvent {
-    Update,
+    Update { target: NodeID },
     Creation { target: NodeID },
     Destruction { target: NodeID },
 }
@@ -17,7 +17,7 @@ impl LifecycleEvent {
     pub fn event_type(&self) -> LifecycleEventType {
         match self {
             LifecycleEvent::Creation { .. } => LifecycleEventType::Creation,
-            LifecycleEvent::Update => LifecycleEventType::Update,
+            LifecycleEvent::Update { .. } => LifecycleEventType::Update,
             LifecycleEvent::Destruction { .. } => LifecycleEventType::Destruction,
         }
     }
@@ -35,8 +35,8 @@ impl LifecycleManager {
         self.queue.push(LifecycleEvent::Creation { target });
     }
 
-    pub fn handle_update(&mut self) {
-        self.queue.push(LifecycleEvent::Update);
+    pub fn handle_update(&mut self, target: NodeID) {
+        self.queue.push(LifecycleEvent::Update { target });
     }
 
     pub fn handle_destruction(&mut self, target: NodeID) {
