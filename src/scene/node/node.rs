@@ -1,68 +1,12 @@
-use crate::{
-    event::{EventContext, EventType, managers::event_manager::CallbackID},
-    util::{Color, Position},
-};
+use crate::event::{EventType, context::EventContext, event_manager::CallbackID};
 use std::{
-    collections::VecDeque,
     fmt::Display,
     sync::atomic::{AtomicU32, Ordering},
-    time::Duration,
 };
 
 // Types
 pub type ListenerQueue = Vec<NodeListenerAction>;
-pub type ActionQueue = VecDeque<NodeAction>;
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
-pub enum NodeActionType {
-    BGColor,
-    Layer,
-    Position,
-    BorderRadius,
-    Scale,
-    Size,
-    Wait,
-}
-#[derive(Debug, Clone, Copy, PartialEq)]
-pub enum NodeAction {
-    BGColor {
-        color: Color,
-    },
-    Layer {
-        layer: usize,
-    },
-    BorderRadius {
-        radius: u32,
-    },
-    Scale {
-        x: f32,
-        y: f32,
-    },
-    Position {
-        position: Option<Position>,
-        absolute: Option<bool>,
-    },
-    Size {
-        width: u32,
-        height: u32,
-    },
-    Wait {
-        duration: Duration,
-    },
-}
-impl NodeAction {
-    pub fn get_type(&self) -> NodeActionType {
-        match self {
-            NodeAction::BGColor { .. } => NodeActionType::BGColor,
-            NodeAction::Layer { .. } => NodeActionType::Layer,
-            NodeAction::Position { .. } => NodeActionType::Position,
-            NodeAction::BorderRadius { .. } => NodeActionType::BorderRadius,
-            NodeAction::Scale { .. } => NodeActionType::Scale,
-            NodeAction::Size { .. } => NodeActionType::Size,
-            NodeAction::Wait { .. } => NodeActionType::Wait,
-        }
-    }
-}
 pub enum NodeListenerAction {
     Add {
         event_type: EventType,
@@ -74,6 +18,7 @@ pub enum NodeListenerAction {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Ord, PartialOrd)]
+/// An unique representation of a node.
 pub struct NodeID(u32);
 
 static NEXT_ID: AtomicU32 = AtomicU32::new(0);

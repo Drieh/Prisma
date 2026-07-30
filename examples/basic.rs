@@ -2,9 +2,7 @@ use prismae::Prisma;
 use prismae::Scene;
 use prismae::WindowBuilder;
 use prismae::error::PrismaError;
-use prismae::event::EventType;
-use prismae::event::WindowEventType;
-
+use prismae::event::WindowCloseRequest;
 use prismae::util::Color;
 
 fn main() -> Result<(), PrismaError> {
@@ -17,10 +15,9 @@ fn main() -> Result<(), PrismaError> {
         .border_radius(25)
         .position(100, 100);
 
-    scene.on_event(
-        EventType::Window(WindowEventType::CloseRequest),
-        |context| context.close(0),
-    );
+    scene.on_event::<WindowCloseRequest>(|context, _event| {
+        context.close(0);
+    });
     Prisma::builder()?
         .window(
             WindowBuilder::new("Example")

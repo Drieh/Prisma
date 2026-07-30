@@ -6,4 +6,4 @@ mod tree;
 pub use node_states::NodeState;
 pub use style::Style;
 pub use transform::Transform;
-pub use tree::TreeNode;
+pub use tree::Tree;

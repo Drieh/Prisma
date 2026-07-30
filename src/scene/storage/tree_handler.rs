@@ -2,19 +2,19 @@ use std::collections::HashMap;
 
 use crate::{
     error::PrismaError,
-    scene::{NodeID, node::components::TreeNode},
+    scene::{NodeID, node::components::Tree},
 };
 
 pub struct TreeHandler<'a> {
-    pub(crate) storage: &'a mut HashMap<NodeID, TreeNode>,
+    pub(crate) storage: &'a mut HashMap<NodeID, Tree>,
 }
 
 impl<'a> TreeHandler<'a> {
-    pub(crate) fn new(storage: &'a mut HashMap<NodeID, TreeNode>) -> Self {
+    pub(crate) fn new(storage: &'a mut HashMap<NodeID, Tree>) -> Self {
         Self { storage }
     }
 
-    pub fn get(&self, id: NodeID) -> Result<&TreeNode, PrismaError> {
+    pub fn get(&self, id: NodeID) -> Result<&Tree, PrismaError> {
         self.storage
             .get(&id)
             .ok_or(PrismaError::NodeComponentNotFound(id))
@@ -47,11 +47,11 @@ impl<'a> TreeHandler<'a> {
         self.storage.contains_key(&id)
     }
 
-    pub(crate) fn get_unchecked(&self, id: NodeID) -> &TreeNode {
+    pub(crate) fn get_unchecked(&self, id: NodeID) -> &Tree {
         self.storage.get(&id).expect("Node component not found!")
     }
 
-    pub(crate) fn get_unchecked_mut(&mut self, id: NodeID) -> &mut TreeNode {
+    pub(crate) fn get_unchecked_mut(&mut self, id: NodeID) -> &mut Tree {
         self.storage
             .get_mut(&id)
             .expect("Node component not found!")
@@ -61,7 +61,7 @@ impl<'a> TreeHandler<'a> {
         if self.contains(id) {
             panic!("Node component already exists!");
         }
-        self.storage.insert(id, TreeNode::new(id));
+        self.storage.insert(id, Tree::new(id));
     }
 
     pub(crate) fn remove(&mut self, id: NodeID) {

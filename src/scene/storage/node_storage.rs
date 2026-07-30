@@ -1,11 +1,14 @@
-use std::collections::HashMap;
+use std::{collections::HashMap, time::Instant};
 
 use crate::{
     error::PrismaError,
+    node::{Action, NodeAction},
     scene::{
         NodeID,
-        node::components::{NodeState, Style, Transform, TreeNode},
-        node::{ActionQueue, ListenerQueue, NodeListenerAction, NodeView},
+        node::{
+            ActionQueue, ListenerQueue, NodeListenerAction, NodeView,
+            components::{NodeState, Style, Transform, Tree},
+        },
         storage::{
             ActionQueueHandler, ListenerQueueHandler, StateHandler, StorageHandler, StyleHandler,
             TransformHandler, TreeHandler,
@@ -14,7 +17,7 @@ use crate::{
 };
 
 pub struct NodeStorage {
-    tree: HashMap<NodeID, TreeNode>,
+    tree: HashMap<NodeID, Tree>,
     style: HashMap<NodeID, Style>,
     state: HashMap<NodeID, NodeState>,
     transform: HashMap<NodeID, Transform>,
@@ -38,7 +41,7 @@ impl NodeStorage {
 
         self.storage().insert_context(id);
 
-        self.get_node(id).expect("Node creation failed!")
+        self.get_node_view(id).expect("Node creation failed!")
     }
 
     pub fn exists(&self, id: NodeID) -> bool {
@@ -61,7 +64,11 @@ impl NodeStorage {
         }
     }
 
-    pub fn get_node(&mut self, id: NodeID) -> Result<NodeView<'_>, PrismaError> {
+    pub fn get_state(&mut self) -> StateHandler<'_> {
+        StateHandler::new(&mut self.state)
+    }
+
+    pub fn get_node_view(&mut self, id: NodeID) -> Result<NodeView<'_>, PrismaError> {
         NodeView::new(id, self)
     }
 

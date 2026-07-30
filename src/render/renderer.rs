@@ -54,7 +54,7 @@ impl Renderer {
         }
     }
     fn render(&mut self, render_queue: BTreeMap<usize, Vec<NodeID>>, scene: &mut Scene) {
-        self.canvas.set_draw_color(scene.color);
+        self.canvas.set_draw_color(scene.color.as_sdl_color());
         self.canvas.clear();
 
         for layer in render_queue.values() {
@@ -64,7 +64,7 @@ impl Renderer {
         }
     }
     fn render_node(&mut self, id: NodeID, scene: &mut Scene) {
-        let world_position = scene.get_node(id).unwrap().get_world_position();
+        let world_position = scene.get_node(id).unwrap().get_absolute_position();
         let node = scene
             .get_node(id)
             .expect("Internal invariant violated: render layer contains an invalid node ID");
@@ -83,7 +83,7 @@ impl Renderer {
             a: color.a,
         });
 
-        let (width, height) = node.get_bouding_box_size();
+        let (width, height) = node.get_bounding_box_size();
         let position = draw_transform.position;
         let border_radius = node.get_style().border_radius;
         let (scale_x, scale_y) = (draw_transform.scale.0, draw_transform.scale.1);

@@ -2,90 +2,12 @@ use sdl3::event::Event as SdlEvent;
 use sdl3::mouse::MouseButton as SdlMouseButton;
 use std::collections::{HashMap, HashSet};
 
-use crate::util::Position;
-
-#[derive(Hash, Eq, PartialEq, Clone, Copy, Debug)]
-pub enum MouseButton {
-    Left,
-    Right,
-    Middle,
-    X1,
-    X2,
-    Unknown,
-}
-
-#[derive(Hash, Eq, PartialEq, Clone, Copy, Debug)]
-pub enum MouseEventType {
-    MouseMove,
-    MouseDown,
-    MouseUp,
-    Click,
-    DragStart,
-    Drag,
-    DragEnd,
-    Enter,
-    Leave,
-}
-#[derive(Clone, Copy, Debug)]
-pub enum MouseEvent {
-    MouseMove {
-        x: f32,
-        y: f32,
+use crate::{
+    event::{
+        Click, Drag, DragEnd, DragStart, MouseButton, MouseDown, MouseEvent, MouseMove, MouseUp,
     },
-    MouseDown {
-        x: f32,
-        y: f32,
-        mouse_btn: MouseButton,
-    },
-    MouseUp {
-        x: f32,
-        y: f32,
-        mouse_btn: MouseButton,
-    },
-    Click {
-        x: f32,
-        y: f32,
-        mouse_btn: MouseButton,
-    },
-    DragStart {
-        x: f32,
-        y: f32,
-        mouse_btn: MouseButton,
-    },
-    Drag {
-        x: f32,
-        y: f32,
-        mouse_btn: MouseButton,
-    },
-    DragEnd {
-        x: f32,
-        y: f32,
-        mouse_btn: MouseButton,
-    },
-    Enter {
-        x: f32,
-        y: f32,
-    },
-    Leave {
-        x: f32,
-        y: f32,
-    },
-}
-impl MouseEvent {
-    pub fn get_type(&self) -> MouseEventType {
-        match self {
-            MouseEvent::MouseMove { .. } => MouseEventType::MouseMove,
-            MouseEvent::MouseDown { .. } => MouseEventType::MouseDown,
-            MouseEvent::MouseUp { .. } => MouseEventType::MouseUp,
-            MouseEvent::Click { .. } => MouseEventType::Click,
-            MouseEvent::DragStart { .. } => MouseEventType::DragStart,
-            MouseEvent::Drag { .. } => MouseEventType::Drag,
-            MouseEvent::DragEnd { .. } => MouseEventType::DragEnd,
-            MouseEvent::Enter { .. } => MouseEventType::Enter,
-            MouseEvent::Leave { .. } => MouseEventType::Leave,
-        }
-    }
-}
+    util::Position,
+};
 
 const DRAG_TOLERANCE: f32 = 5.0;
 pub struct MouseManager {
@@ -94,7 +16,6 @@ pub struct MouseManager {
     is_dragging: HashSet<MouseButton>,
     queue: Vec<MouseEvent>,
 }
-
 impl MouseManager {
     pub fn new() -> Self {
         Self {
@@ -128,7 +49,10 @@ impl MouseManager {
                 self.position = Position { x, y };
                 self.last_down_position.insert(mouse_btn, Position { x, y });
 
-                self.queue.push(MouseEvent::MouseDown { x, y, mouse_btn });
+                self.queue.push(MouseEvent::MouseDown(MouseDown {
+                    position: Position { x, y },
+                    mouse_btn,
+                }));
             }
 
             SdlEvent::MouseButtonUp {
@@ -140,20 +64,31 @@ impl MouseManager {
                 let mouse_btn = self.match_sdl_mouse_button(sdl_mouse_btn);
 
                 if self.is_dragging.contains(&mouse_btn) {
-                    self.queue.push(MouseEvent::DragEnd { x, y, mouse_btn });
+                    self.queue.push(MouseEvent::MouseDragEnd(DragEnd {
+                        position: Position { x, y },
+                        mouse_btn,
+                    }));
                 } else if self.last_down_position.contains_key(&mouse_btn) {
-                    self.queue.push(MouseEvent::Click { x, y, mouse_btn });
+                    self.queue.push(MouseEvent::MouseClick(Click {
+                        position: Position { x, y },
+                        mouse_btn,
+                    }));
                 }
                 self.is_dragging.remove(&mouse_btn);
                 self.last_down_position.remove(&mouse_btn);
 
-                self.queue.push(MouseEvent::MouseUp { x, y, mouse_btn });
+                self.queue.push(MouseEvent::MouseUp(MouseUp {
+                    position: Position { x, y },
+                    mouse_btn,
+                }));
                 self.position = Position { x, y };
             }
 
             SdlEvent::MouseMotion { x, y, .. } => {
                 self.position = Position { x, y };
-                self.queue.push(MouseEvent::MouseMove { x, y });
+                self.queue.push(MouseEvent::MouseMove(MouseMove {
+                    position: Position { x, y },
+                }));
                 for (button, down_position) in &self.last_down_position {
                     let Position {
                         x: down_position_x,
@@ -165,23 +100,23 @@ impl MouseManager {
 
                     if dx * dx + dy * dy > DRAG_TOLERANCE * DRAG_TOLERANCE {
                         if self.is_dragging.contains(button) {
-                            self.queue.push(MouseEvent::Drag {
-                                x,
-                                y,
+                            self.queue.push(MouseEvent::MouseDrag(Drag {
+                                position: Position { x, y },
                                 mouse_btn: *button,
-                            });
+                            }));
                         } else {
                             self.is_dragging.insert(*button);
-                            self.queue.push(MouseEvent::DragStart {
-                                x: down_position_x,
-                                y: down_position_y,
+                            self.queue.push(MouseEvent::MouseDragStart(DragStart {
+                                position: Position {
+                                    x: down_position_x,
+                                    y: down_position_y,
+                                },
                                 mouse_btn: *button,
-                            });
+                            }));
                         }
                     }
                 }
             }
-
             _ => {}
         }
     }

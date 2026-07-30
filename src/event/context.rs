@@ -2,7 +2,7 @@ use std::time::{Duration, Instant};
 
 use crate::{
     app::error::PrismaError,
-    event::{Event, EventManager, EventType, managers::event_manager::CallbackID},
+    event::{CallbackID, Event, EventData, EventManager, EventType},
     scene::{
         NodeID, NodeView,
         storage::{NodeStorage, StorageHandler},
@@ -46,6 +46,43 @@ pub enum PropagationState {
     Stopped,
 }
 
+/// Provides contextual information and utilities while an event is being dispatched.
+///
+/// `EventContext` is passed to every event callback and grants access to the
+/// current event, its target, and scene-level operations.
+///
+/// All structural and scene modifications requested through the context are deferred until event dispatch has finished.
+///
+/// # Capabilities
+/// - Access the dispatched event through [`event`] or [`expect_event`].
+/// - Access the original target and the current propagation target.
+/// - Read or modify nodes through [`NodeView`].
+/// - Create, destroy, or reorganize nodes.
+/// - Register or remove scene-level event listeners.
+/// - Control event propagation.
+/// - Request or cancel application shutdown.
+///
+/// # Target
+///
+/// Some events participate in propagation. In these cases:
+///
+/// - [`target`] refers to the original event target.
+/// - [`current_target`] refers to the node currently handling the event.
+///
+/// For scene- or window-level events, neither value may exist, therefore both methods return an `Option`.
+///
+/// # Example
+///
+/// ```ignore
+/// .on_event::<MouseDown>(|ctx, event| {
+///     if let Some(mut node) = ctx.current_target() {
+///         node.position(
+///             event.position.x as i32,
+///             event.position.y as i32,
+///         );
+///     }
+/// })
+/// ```
 pub struct EventContext<'a> {
     pub(crate) target: Option<NodeID>,
     pub(crate) current_target: Option<NodeID>,
@@ -83,11 +120,21 @@ impl<'a> EventContext<'a> {
         self.event.unwrap()
     }
 
-    pub fn og_target(&mut self) -> Option<NodeView<'_>> {
-        self.current_target
-            .map(|target| self.get_node(target).unwrap())
+    pub(crate) fn expect_event<T>(&self) -> Result<T, PrismaError>
+    where
+        T: EventData,
+    {
+        T::cast(self.event()).ok_or(PrismaError::UnexpectedEventType(
+            T::TYPE.get_kind(),
+            self.event().get_kind(),
+        ))
     }
+
     pub fn target(&mut self) -> Option<NodeView<'_>> {
+        self.target.map(|target| self.get_node(target).unwrap())
+    }
+
+    pub fn current_target(&mut self) -> Option<NodeView<'_>> {
         self.current_target
             .map(|target| self.get_node(target).unwrap())
     }

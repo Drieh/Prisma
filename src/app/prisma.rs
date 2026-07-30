@@ -142,6 +142,12 @@ pub struct Prisma {
     windows_close_queue: Vec<u32>,
 }
 impl Prisma {
+    /// Returns an app builder.
+    /// Is the first step using Prisma.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`PrismaError::InitError`] if there is any error in initialization.
     pub fn builder() -> Result<AppBuilder, PrismaError> {
         let sdl_context = sdl3::init().map_err(|e| PrismaError::InitError(e.to_string()))?;
 
@@ -152,6 +158,11 @@ impl Prisma {
         Ok(AppBuilder::new(video_subsystem, sdl_context))
     }
 
+    /// Runs the app
+    ///
+    /// # Errors
+    ///
+    /// Returns [`PrismaError`] if there is any error during runtime.
     pub fn run(mut self) -> Result<(), PrismaError> {
         self.running = true;
         let frame_time = Duration::from_millis(1000 / 60);
@@ -208,6 +219,8 @@ impl Prisma {
         Ok(())
     }
 }
+
+/// A builder used to configure and create a [`Prisma`] application.
 pub struct AppBuilder {
     video_subsystem: VideoSubsystem,
     sdl_context: sdl3::Sdl,

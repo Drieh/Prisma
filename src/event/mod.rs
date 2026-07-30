@@ -1,18 +1,13 @@
 pub(crate) mod context;
-pub(crate) mod managers;
+pub(crate) mod event_manager;
 
-pub(crate) use context::EventContext;
-pub(crate) use managers::event_manager::EventManager;
+mod event;
+mod event_data;
+mod macros;
+mod manager;
 
-pub use managers::event_manager::Event;
-pub use managers::event_manager::EventType;
+pub use event::*;
 
-pub use managers::mouse_manager::MouseButton;
-pub use managers::mouse_manager::MouseEvent;
-pub use managers::mouse_manager::MouseEventType;
-
-pub use managers::lifecycle_manager::LifecycleEvent;
-pub use managers::lifecycle_manager::LifecycleEventType;
-
-pub use managers::WindowEvent;
-pub use managers::WindowEventType;
+pub(crate) use event_data::EventData;
+pub(crate) use event_manager::CallbackID;
+pub(crate) use event_manager::EventManager;

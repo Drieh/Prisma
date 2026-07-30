@@ -38,3 +38,9 @@ impl Add<&Transform> for &Transform {
         *self + *rhs
     }
 }
+
+impl Default for Transform {
+    fn default() -> Self {
+        Transform::new()
+    }
+}

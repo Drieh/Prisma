@@ -1,12 +1,12 @@
 use crate::scene::NodeID;
 
 #[derive(Debug, Clone)]
-pub struct TreeNode {
+pub struct Tree {
     id: NodeID,
     parent: Option<NodeID>,
     children: Vec<NodeID>,
 }
-impl TreeNode {
+impl Tree {
     pub(crate) fn new(id: NodeID) -> Self {
         Self {
             id,

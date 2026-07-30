@@ -1,4 +1,5 @@
 pub mod node;
+#[warn(clippy::module_inception)]
 mod scene;
 pub(crate) mod storage;
 

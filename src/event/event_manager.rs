@@ -1,35 +1,34 @@
-use crate::event::EventContext;
-use crate::event::context::{CloseRequest, PropagationState};
-use crate::event::managers::{LifecycleEvent, LifecycleEventType, LifecycleManager};
-use crate::event::managers::{MouseEvent, MouseEventType, MouseManager};
-use crate::event::managers::{WindowEvent, WindowEventType, WindowManager};
+use crate::event::LifecycleEvent;
+use crate::event::LifecycleEventType;
+use crate::event::MouseEnter;
+use crate::event::MouseEvent;
+use crate::event::MouseLeave;
+use crate::event::context::CloseRequest;
+use crate::event::context::EventContext;
+use crate::event::context::PropagationState;
+use crate::event::manager::LifecycleManager;
+use crate::event::manager::MouseManager;
+use crate::event::manager::WindowManager;
 use std::collections::{HashMap, HashSet};
 use std::fmt::Display;
 use std::sync::atomic::{AtomicU32, Ordering};
 
+use crate::event::event::{Event, EventKind, EventType, MouseEventType};
+
 use crate::scene::NodeID;
 use crate::util::Position;
 
-#[derive(Hash, Eq, PartialEq, Clone, Copy, Debug)]
-pub enum EventType {
-    Mouse(MouseEventType),
-    Window(WindowEventType),
-    Lifecycle(LifecycleEventType),
-    AppCloseRequest,
-    CancelAppCloseRequest,
-    Quit,
-}
 impl EventType {
     pub fn bubbles_by_default(&self) -> bool {
         match self {
             // excluded events
             EventType::Lifecycle(..)
-            | EventType::Mouse(MouseEventType::Enter)
-            | EventType::Mouse(MouseEventType::Leave)
+            | EventType::Mouse(MouseEventType::MouseEnter)
+            | EventType::Mouse(MouseEventType::MouseLeave)
             | EventType::Mouse(MouseEventType::MouseMove)
-            | EventType::Mouse(MouseEventType::DragStart)
-            | EventType::Mouse(MouseEventType::Drag)
-            | EventType::Mouse(MouseEventType::DragEnd)
+            | EventType::Mouse(MouseEventType::MouseDragStart)
+            | EventType::Mouse(MouseEventType::MouseDrag)
+            | EventType::Mouse(MouseEventType::MouseDragEnd)
             | EventType::AppCloseRequest
             | EventType::CancelAppCloseRequest
             | EventType::Quit
@@ -37,10 +36,21 @@ impl EventType {
 
             EventType::Mouse(MouseEventType::MouseDown)
             | EventType::Mouse(MouseEventType::MouseUp)
-            | EventType::Mouse(MouseEventType::Click) => true,
+            | EventType::Mouse(MouseEventType::MouseClick) => true,
+        }
+    }
+    pub fn get_kind(&self) -> EventKind {
+        match self {
+            EventType::Mouse(..) => EventKind::Mouse,
+            EventType::Window(..) => EventKind::Window,
+            EventType::Lifecycle(..) => EventKind::Lifecycle,
+            EventType::AppCloseRequest => EventKind::AppCloseRequest,
+            EventType::CancelAppCloseRequest => EventKind::CancelAppCloseRequest,
+            EventType::Quit => EventKind::Quit,
         }
     }
 }
+/*
 
 #[derive(Clone, Copy, Debug)]
 pub enum Event {
@@ -51,24 +61,39 @@ pub enum Event {
     CancelAppCloseRequest,
     Quit,
 }
+*/
 impl Event {
     pub fn get_type(&self) -> EventType {
         match self {
-            Event::Mouse { event } => EventType::Mouse(event.get_type()),
-            Event::Window { event } => EventType::Window(event.event_type()),
-            Event::Lifecycle { event } => EventType::Lifecycle(event.event_type()),
+            Event::Mouse(event) => EventType::Mouse(event.event_type()),
+            Event::Window(event) => EventType::Window(event.event_type()),
+            Event::Lifecycle(event) => EventType::Lifecycle(event.event_type()),
             Event::AppCloseRequest => EventType::AppCloseRequest,
             Event::CancelAppCloseRequest => EventType::CancelAppCloseRequest,
             Event::Quit => EventType::Quit,
         }
     }
-}
 
+    pub fn get_kind(&self) -> EventKind {
+        match self {
+            Event::Mouse { .. } => EventKind::Mouse,
+            Event::Window { .. } => EventKind::Window,
+            Event::Lifecycle { .. } => EventKind::Lifecycle,
+            Event::AppCloseRequest => EventKind::AppCloseRequest,
+            Event::CancelAppCloseRequest => EventKind::CancelAppCloseRequest,
+            Event::Quit => EventKind::Quit,
+        }
+    }
+}
 #[derive(Eq, Hash, PartialEq, Clone, Copy, Debug)]
 pub struct CallbackID(u32);
 static NEXT_LISTENER_ID: AtomicU32 = AtomicU32::new(0);
 impl CallbackID {
-    pub fn next() -> Self {
+    pub fn id(id: u32) -> Self {
+        Self(id)
+    }
+
+    pub(crate) fn next() -> Self {
         Self(NEXT_LISTENER_ID.fetch_add(1, Ordering::Relaxed))
     }
 }
@@ -231,7 +256,7 @@ impl EventManager {
     ) {
         let mut already_updated: HashSet<NodeID> = HashSet::new();
         for (target, event_type) in self.node_listeners_lookup.values() {
-            if *event_type != EventType::Lifecycle(LifecycleEventType::Update) {
+            if *event_type != EventType::Lifecycle(LifecycleEventType::LifecycleUpdate) {
                 continue;
             }
             if pending_created.contains(target) || pending_destroyed.contains(target) {
@@ -258,13 +283,13 @@ impl EventManager {
         let mut events: Vec<Event> = Vec::new();
 
         for event in self.mouse_manager.take_events() {
-            events.push(Event::Mouse { event });
+            events.push(Event::Mouse(event));
         }
         for event in self.window_manager.take_events() {
-            events.push(Event::Window { event });
+            events.push(Event::Window(event));
         }
         for event in self.lifecycle_manager.take_events() {
-            events.push(Event::Lifecycle { event });
+            events.push(Event::Lifecycle(event));
         }
 
         if !self.close_request_dispatched && self.close_request.is_some() {
@@ -292,11 +317,11 @@ impl EventManager {
             let mut node = context
                 .get_node(id)
                 .expect("Invariant violated: node tree contains an invalid ID.");
-            let (w, h) = node.get_bouding_box_size();
+            let (w, h) = node.get_bounding_box_size();
             let Position {
                 x: node_x,
                 y: node_y,
-            } = node.get_world_position();
+            } = node.get_absolute_position();
 
             let inside =
                 x >= node_x && y >= node_y && x <= (node_x + w as f32) && y <= (node_y + h as f32);
@@ -351,13 +376,13 @@ impl EventManager {
             self.dispatch_scene(event_type, context);
 
             match event {
-                Event::Mouse { event } => {
+                Event::Mouse(event) => {
                     self.dispatch_mouse_event(event_type, context, event);
                 }
                 Event::Window { .. } => {
                     self.dispatch_window_event(event_type, context);
                 }
-                Event::Lifecycle { event } => {
+                Event::Lifecycle(event) => {
                     self.dispatch_lifecycle_event(event_type, context, event)
                 }
                 Event::AppCloseRequest | Event::Quit => {
@@ -377,21 +402,26 @@ impl EventManager {
         event: MouseEvent,
     ) {
         match event {
-            MouseEvent::MouseDown { x, y, .. } => {
-                if let Some(target) = self.hit_test(x, y, context).pop() {
+            MouseEvent::MouseDown(event) => {
+                if let Some(target) = self
+                    .hit_test(event.position.x, event.position.y, context)
+                    .pop()
+                {
                     context.target = Some(target);
                     self.dispatch_node(event_type, context, target);
                     self.active_node = Some(target);
                 }
             }
-            MouseEvent::MouseUp { .. } => {
+            MouseEvent::MouseUp(..) => {
                 if let Some(active) = self.active_node {
                     context.target = Some(active);
                     self.dispatch_node(event_type, context, active);
                 }
                 self.active_node = None;
             }
-            MouseEvent::MouseMove { x, y } => {
+            MouseEvent::MouseMove(event) => {
+                let x = event.position.x;
+                let y = event.position.y;
                 self.dispatch_all_nodes(event_type, context);
                 let hit_test = self.hit_test(x, y, context).pop();
 
@@ -399,16 +429,17 @@ impl EventManager {
                     if Some(target) != self.hovered_node {
                         if let Some(hovered) = self.hovered_node {
                             context.target = Some(hovered);
-                            context.event = Some(Event::Mouse {
-                                event: MouseEvent::Leave { x, y },
-                            });
+                            context.event =
+                                Some(Event::Mouse(MouseEvent::MouseLeave(MouseLeave {
+                                    position: Position { x, y },
+                                })));
                             let event_type = context.event.unwrap().get_type();
                             self.dispatch_node(event_type, context, hovered);
                         }
                         context.target = Some(target);
-                        context.event = Some(Event::Mouse {
-                            event: MouseEvent::Enter { x, y },
-                        });
+                        context.event = Some(Event::Mouse(MouseEvent::MouseEnter(MouseEnter {
+                            position: Position { x, y },
+                        })));
                         let event_type = context.event.unwrap().get_type();
                         self.dispatch_node(event_type, context, target);
 
@@ -417,42 +448,46 @@ impl EventManager {
                 } else {
                     if let Some(hovered) = self.hovered_node {
                         context.target = Some(hovered);
-                        context.event = Some(Event::Mouse {
-                            event: MouseEvent::Leave { x, y },
-                        });
+                        context.event = Some(Event::Mouse(MouseEvent::MouseLeave(MouseLeave {
+                            position: Position { x, y },
+                        })));
                         let event_type = context.event.unwrap().get_type();
                         self.dispatch_node(event_type, context, hovered);
                         self.hovered_node = None;
                     }
                 }
             }
-            MouseEvent::Click { .. } => {
+            MouseEvent::MouseClick { .. } => {
                 if let Some(target) = self.active_node {
                     context.target = Some(target);
                     self.dispatch_node(event_type, context, target);
                 }
             }
-            MouseEvent::DragStart { x, y, .. } => {
-                if let Some(target) = self.hit_test(x, y, context).pop() {
+            MouseEvent::MouseDragStart(event) => {
+                if let Some(target) = self
+                    .hit_test(event.position.x, event.position.y, context)
+                    .pop()
+                {
                     context.target = Some(target);
                     self.dispatch_node(event_type, context, target);
                     self.dragged_node = Some(target);
                 }
             }
-            MouseEvent::Drag { .. } => {
+            MouseEvent::MouseDrag { .. } => {
                 if let Some(target) = self.dragged_node {
                     context.target = Some(target);
                     self.dispatch_node(event_type, context, target);
                 }
             }
-            MouseEvent::DragEnd { .. } => {
+            MouseEvent::MouseDragEnd { .. } => {
                 if let Some(target) = self.dragged_node {
                     context.target = Some(target);
                     self.dispatch_node(event_type, context, target);
                 }
                 self.dragged_node = None;
             }
-            _ => {}
+            // they are created in mouse move
+            MouseEvent::MouseEnter { .. } | MouseEvent::MouseLeave { .. } => {}
         }
     }
 
@@ -467,11 +502,17 @@ impl EventManager {
         event: LifecycleEvent,
     ) {
         match event {
-            LifecycleEvent::Creation { target }
-            | LifecycleEvent::Update { target }
-            | LifecycleEvent::Destruction { target } => {
-                context.target = Some(target);
-                self.dispatch_node(event_type, context, target);
+            LifecycleEvent::LifecycleCreation(event) => {
+                context.target = Some(event.target);
+                self.dispatch_node(event_type, context, event.target);
+            }
+            LifecycleEvent::LifecycleUpdate(event) => {
+                context.target = Some(event.target);
+                self.dispatch_node(event_type, context, event.target);
+            }
+            LifecycleEvent::LifecycleDestruction(event) => {
+                context.target = Some(event.target);
+                self.dispatch_node(event_type, context, event.target);
             }
         }
     }

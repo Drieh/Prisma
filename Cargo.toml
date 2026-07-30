@@ -18,3 +18,7 @@ sdl3 = { version = "0.18.4", features = ["build-from-source"] }
 [[example]]
 name = "basic"
 path = "examples/basic.rs"
+
+[[example]]
+name = "drag"
+path = "examples/drag.rs"
