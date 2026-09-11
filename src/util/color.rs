@@ -1,4 +1,4 @@
-use std::ops::{Add, AddAssign};
+use std::ops::AddAssign;
 
 use sdl3::pixels::Color as SdlColor;
 

@@ -19,7 +19,7 @@ impl Renderer {
         _self
     }
 
-    pub fn draw(&mut self, scene: &mut Scene, resources: &mut ResourceManager) {
+    pub fn draw(&mut self, scene: &mut Scene, _resources: &mut ResourceManager) {
         let mut storage = scene.storage();
         let render_queue = self.build_render_layers(&mut storage);
 
@@ -187,7 +187,6 @@ impl Renderer {
         self.render_text(id, scene);
     }
 
-    fn render_text(&mut self, id: NodeID, scene: &mut Scene) {
-        let text = scene.storage().text.get_unchecked(id);
-    }
+    #[expect(unused)]
+    fn render_text(&mut self, id: NodeID, scene: &mut Scene) {}
 }

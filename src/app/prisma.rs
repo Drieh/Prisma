@@ -3,7 +3,7 @@ use std::{
     time::{Duration, Instant},
 };
 
-use sdl3::{Sdl, VideoSubsystem, get_error as sdl_get_error};
+use sdl3::{Sdl, get_error as sdl_get_error};
 use sdl3_ttf_sys::ttf::{TTF_Init, TTF_Quit};
 
 use crate::{WindowBuilder, resources::ResourceManager};

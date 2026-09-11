@@ -2,7 +2,7 @@ use std::time::{Duration, Instant};
 
 use crate::{
     app::error::PrismaError,
-    event::{self, Event, EventCallbackID, EventData, EventManager, EventType},
+    event::{Event, EventCallbackID, EventData, EventManager, EventType},
     node::ActionOrigin,
     scene::{
         NodeID, NodeView,

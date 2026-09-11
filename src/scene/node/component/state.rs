@@ -1,13 +1,9 @@
 use std::{
     any::{Any, TypeId},
-    collections::{HashMap, HashSet},
-    time::Duration,
+    collections::HashMap,
 };
 
-use crate::{
-    error::PrismaError,
-    node::{Action, ActionType, node_action::StyleAction, style_view::StyleCallback},
-};
+use crate::{error::PrismaError, node::style_view::StyleCallback};
 
 pub struct TypeMap {
     map: HashMap<TypeId, Box<dyn Any>>,

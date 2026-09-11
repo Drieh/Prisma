@@ -3,7 +3,6 @@ use prismae::Scene;
 use prismae::WindowBuilder;
 use prismae::error::PrismaError;
 use prismae::event::WindowCloseRequest;
-use prismae::node::StyleView;
 use prismae::util::Color;
 
 fn main() -> Result<(), PrismaError> {

@@ -11,6 +11,7 @@ use crate::event::context::PropagationState;
 use crate::event::manager::LifecycleManager;
 use crate::event::manager::MouseManager;
 use crate::event::manager::WindowManager;
+use crate::util::Size;
 use std::collections::{HashMap, HashSet};
 
 use crate::event::{Event, EventType};
@@ -230,13 +231,16 @@ impl EventManager {
             let mut node = context
                 .get_node(id)
                 .expect("Invariant violated: node tree contains an invalid ID.");
-            let (w, h) = node.get_bounding_box_size();
+            let Size { width, height } = node.get_bounding_box_size();
             let Position {
                 x: node_x,
                 y: node_y,
             } = node.get_absolute_position();
 
-            let inside = x >= node_x && y >= node_y && x <= (node_x + w) && y <= (node_y + h);
+            let inside = x >= node_x
+                && y >= node_y
+                && x <= (node_x + width as i32)
+                && y <= (node_y + height as i32);
 
             let node_layer = node.get_visual().get_layer().unwrap_or(0);
             if max_layer < node_layer {

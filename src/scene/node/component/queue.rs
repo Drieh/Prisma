@@ -13,6 +13,7 @@ impl NodeQueue {
         }
     }
 
+    #[expect(unused)]
     pub(crate) fn take<T>(&mut self) -> VecDeque<T>
     where
         T: ActionFamily,
@@ -27,6 +28,7 @@ impl NodeQueue {
         }
     }
 
+    #[expect(unused)]
     pub(crate) fn push_front<T>(&mut self, action: T, origin: ActionOrigin)
     where
         T: ActionFamily,
