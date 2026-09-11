@@ -2,17 +2,12 @@ use std::ops::Add;
 
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct Position {
-    pub x: f32,
-    pub y: f32,
+    pub x: i32,
+    pub y: i32,
 }
 impl Position {
     pub fn new() -> Self {
-        Self { x: 0.0, y: 0.0 }
-    }
-}
-impl Default for Position {
-    fn default() -> Self {
-        Self::new()
+        Self { x: 0, y: 0 }
     }
 }
 

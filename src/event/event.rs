@@ -9,6 +9,7 @@ pub enum MouseButton {
     X2,
     Unknown,
 }
+
 define_events! {
     Window as WindowEvent, WindowEventType
     {
@@ -27,6 +28,7 @@ define_events! {
     }
     Lifecycle as LifecycleEvent, LifecycleEventType
     {
+
         LifecycleCreation as NodeCreation {
             target: NodeID,
         }

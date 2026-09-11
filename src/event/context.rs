@@ -2,7 +2,8 @@ use std::time::{Duration, Instant};
 
 use crate::{
     app::error::PrismaError,
-    event::{CallbackID, Event, EventData, EventManager, EventType},
+    event::{self, Event, EventCallbackID, EventData, EventManager, EventType},
+    node::ActionOrigin,
     scene::{
         NodeID, NodeView,
         storage::{NodeStorage, StorageHandler},
@@ -35,15 +36,20 @@ pub enum ContextAction {
         callback: Box<dyn FnMut(&mut EventContext) + 'static>,
     },
     RemoveSceneEventListener {
-        target: CallbackID,
+        target: EventCallbackID,
     },
 }
 
 #[derive(Debug, Clone, Copy)]
-pub enum PropagationState {
+pub(crate) enum PropagationState {
     None,
     Bubble,
     Stopped,
+}
+
+pub(crate) struct EventTarget {
+    original: NodeID,
+    current: NodeID,
 }
 
 /// Provides contextual information and utilities while an event is being dispatched.
@@ -84,9 +90,8 @@ pub enum PropagationState {
 /// })
 /// ```
 pub struct EventContext<'a> {
-    pub(crate) target: Option<NodeID>,
-    pub(crate) current_target: Option<NodeID>,
-    pub(crate) current_callback: Option<CallbackID>,
+    pub(crate) target: Option<EventTarget>,
+    pub(crate) current_callback: Option<EventCallbackID>,
     pub(crate) event: Option<Event>,
     pub(crate) close_request: Option<CloseRequest>,
 
@@ -103,7 +108,6 @@ impl<'a> EventContext<'a> {
         Self {
             event: None,
             target: None,
-            current_target: None,
             current_callback: None,
             close_request: None,
 
@@ -116,27 +120,45 @@ impl<'a> EventContext<'a> {
         }
     }
 
-    pub fn event(&self) -> Event {
-        self.event.unwrap()
-    }
-
     pub(crate) fn expect_event<T>(&self) -> Result<T, PrismaError>
     where
         T: EventData,
     {
-        T::cast(self.event()).ok_or(PrismaError::UnexpectedEventType(
+        let event = self.event.unwrap();
+        T::cast(event).ok_or(PrismaError::UnexpectedEventType(
             T::TYPE.get_kind(),
-            self.event().get_kind(),
+            event.get_kind(),
         ))
     }
 
+    pub(crate) fn set_current_target(&mut self, target: NodeID) {
+        if let Some(event_target) = &mut self.target {
+            event_target.original = target;
+        } else {
+            self.target = Some(EventTarget {
+                original: target,
+                current: target,
+            });
+        }
+    }
+
+    pub(crate) fn set_original_target(&mut self, target: NodeID) {
+        if let Some(event_target) = &mut self.target {
+            event_target.original = target;
+        } else {
+            self.target = Some(EventTarget {
+                original: target,
+                current: target,
+            });
+        }
+    }
+
     pub fn target(&mut self) -> Option<NodeView<'_>> {
-        self.target.map(|target| self.get_node(target).unwrap())
+        self.get_node(self.target.as_ref()?.original).ok()
     }
 
     pub fn current_target(&mut self) -> Option<NodeView<'_>> {
-        self.current_target
-            .map(|target| self.get_node(target).unwrap())
+        self.get_node(self.target.as_ref()?.current).ok()
     }
 
     pub fn stop_propagation(&mut self) {
@@ -147,7 +169,7 @@ impl<'a> EventContext<'a> {
         self.propagation_state = PropagationState::Bubble;
     }
 
-    pub fn current_callback(&mut self) -> CallbackID {
+    pub fn current_callback(&mut self) -> EventCallbackID {
         self.current_callback.unwrap()
     }
 
@@ -169,13 +191,13 @@ impl<'a> EventContext<'a> {
                 callback: Box::new(callback),
             });
     }
-    pub fn off_scene(&mut self, target: CallbackID) {
+    pub fn off_scene(&mut self, target: EventCallbackID) {
         self.action_queue
             .push(ContextAction::RemoveSceneEventListener { target });
     }
 
     pub fn new_node(&mut self) -> NodeView<'_> {
-        let new_node = self.nodes.new_node();
+        let new_node = self.nodes.new_node(ActionOrigin::Event);
         self.action_queue.push(ContextAction::Create {
             target: new_node.get_id(),
         });
@@ -224,7 +246,7 @@ impl<'a> EventContext<'a> {
     }
 
     pub fn get_node(&mut self, id: NodeID) -> Result<NodeView<'_>, PrismaError> {
-        NodeView::new(id, self.nodes)
+        NodeView::new(id, self.nodes, ActionOrigin::Event)
     }
 
     pub(crate) fn take_created_nodes(&mut self) -> Vec<NodeID> {

@@ -16,8 +16,8 @@ pub enum PrismaError {
 
     /// Returned when the node does not contain a state associated with the given key.
     ///
-    /// Contains the node ID and the missing state key.
-    NodeStateNotFound(NodeID, String),
+    /// Contains the missing state key.
+    NodeStateNotFound(String),
 
     /// Returned when a node component is requested using an invalid [`NodeID`].
     ///
@@ -34,13 +34,19 @@ pub enum PrismaError {
     /// Contains the underlying error message.
     RenderError(String),
 
+    /// Returned when an event doen't match the expected event type.
+    ///
+    /// Contains the expected and found event types.
     UnexpectedEventType(EventKind, EventKind),
+
+    /// Returned when a resource is not found.
+    ResourceNotFound(String),
 }
 impl fmt::Display for PrismaError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             PrismaError::InitError(msg) => {
-                write!(f, "Prisma error: {msg}")
+                write!(f, "Initialization error: {msg}")
             }
             PrismaError::RenderError(msg) => {
                 write!(f, "Render error: {msg}")
@@ -48,8 +54,8 @@ impl fmt::Display for PrismaError {
             PrismaError::NodeNotFound(id) => {
                 write!(f, "Node {id} not found")
             }
-            PrismaError::NodeStateNotFound(id, key) => {
-                write!(f, "State {key} not found for node {id}")
+            PrismaError::NodeStateNotFound(t) => {
+                write!(f, "State {t} not found.")
             }
             PrismaError::NodeComponentNotFound(id) => {
                 write!(f, "Component not found for node: {id}")
@@ -62,6 +68,9 @@ impl fmt::Display for PrismaError {
                     f,
                     "Event types do not matches: expected {expected:?} but found {found:?}"
                 )
+            }
+            PrismaError::ResourceNotFound(msg) => {
+                write!(f, "Resource not found: {msg}")
             }
         }
     }

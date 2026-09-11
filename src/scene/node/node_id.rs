@@ -1,21 +1,7 @@
-use crate::event::{EventType, context::EventContext, event_manager::CallbackID};
 use std::{
     fmt::Display,
     sync::atomic::{AtomicU32, Ordering},
 };
-
-// Types
-pub type ListenerQueue = Vec<NodeListenerAction>;
-
-pub enum NodeListenerAction {
-    Add {
-        event_type: EventType,
-        callback: Box<dyn FnMut(&mut EventContext) + 'static>,
-    },
-    Remove {
-        target: CallbackID,
-    },
-}
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Ord, PartialOrd)]
 /// An unique representation of a node.

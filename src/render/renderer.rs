@@ -1,8 +1,10 @@
 use std::collections::BTreeMap;
 
 use crate::{
-    scene::{NodeID, Scene, node::components::Transform},
-    util::Position,
+    render::math::{elipse_top_arc, line},
+    resources::ResourceManager,
+    scene::{NodeID, Scene, storage::StorageHandler},
+    util::{Position, Scale, Size},
 };
 use sdl3::{pixels::Color as SdlColor, rect::Point, render::Canvas, video::Window};
 
@@ -17,137 +19,57 @@ impl Renderer {
         _self
     }
 
-    pub fn draw(&mut self, scene: &mut Scene) {
-        let render_queue = self.build_render_layers(scene);
+    pub fn draw(&mut self, scene: &mut Scene, resources: &mut ResourceManager) {
+        let mut storage = scene.storage();
+        let render_queue = self.build_render_layers(&mut storage);
 
         self.render(render_queue, scene);
         self.canvas.present();
     }
 
-    fn build_render_layers(&mut self, scene: &mut Scene) -> BTreeMap<usize, Vec<NodeID>> {
+    fn build_render_layers(
+        &mut self,
+        storage: &mut StorageHandler,
+    ) -> BTreeMap<usize, Vec<NodeID>> {
         let mut render_queue: BTreeMap<usize, Vec<NodeID>> = BTreeMap::new();
 
-        for id in scene.get_nodes_id() {
-            let node = scene.get_node(id).unwrap();
-            if node.get_parent().is_none() {
-                let layer = node.get_transform().layer;
-                self.visit(id, scene, layer, &mut render_queue);
+        for id in storage.get_nodes() {
+            let node_tree = storage.tree.get_unchecked(id);
+            let visual = storage.visual.get_unchecked(id);
+            if node_tree.get_parent().is_none() {
+                self.visit(id, storage, visual.get_layer(), &mut render_queue);
             }
         }
         render_queue
     }
     fn visit(
         &self,
-        node_id: NodeID,
-        scene: &mut Scene,
+        id: NodeID,
+        storage: &mut StorageHandler,
         parent_layer: Option<usize>,
         render_queue: &mut BTreeMap<usize, Vec<NodeID>>,
     ) {
-        let node = scene.get_node(node_id).unwrap();
+        let StorageHandler { tree, visual, .. } = storage;
+        let layer = visual
+            .get_unchecked(id)
+            .get_layer()
+            .or(parent_layer)
+            .unwrap_or(0);
 
-        let layer = node.get_transform().layer.or(parent_layer).unwrap_or(0);
+        render_queue.entry(layer).or_default().push(id);
 
-        render_queue.entry(layer).or_default().push(node_id);
-
-        for child in node.get_children() {
-            self.visit(child, scene, Some(layer), render_queue);
+        for child in tree.get_unchecked(id).get_children() {
+            self.visit(child, storage, Some(layer), render_queue);
         }
     }
     fn render(&mut self, render_queue: BTreeMap<usize, Vec<NodeID>>, scene: &mut Scene) {
-        self.canvas.set_draw_color(scene.color.as_sdl_color());
+        self.canvas.set_draw_color(scene.color.into_sdl_color());
         self.canvas.clear();
 
         for layer in render_queue.values() {
             for node_id in layer {
                 self.render_node(*node_id, scene);
             }
-        }
-    }
-    fn render_node(&mut self, id: NodeID, scene: &mut Scene) {
-        let world_position = scene.get_node(id).unwrap().get_absolute_position();
-        let node = scene
-            .get_node(id)
-            .expect("Internal invariant violated: render layer contains an invalid node ID");
-
-        let node_transform = *node.get_transform();
-
-        let draw_transform = Transform {
-            position: world_position,
-            ..node_transform
-        };
-        let color = node.get_style().color;
-        self.canvas.set_draw_color(SdlColor {
-            r: color.r,
-            g: color.g,
-            b: color.b,
-            a: color.a,
-        });
-
-        let (width, height) = node.get_bounding_box_size();
-        let position = draw_transform.position;
-        let border_radius = node.get_style().border_radius;
-        let (scale_x, scale_y) = (draw_transform.scale.0, draw_transform.scale.1);
-
-        let radius_x = if border_radius as f32 * scale_x > width as f32 / 2.0 {
-            width / 2
-        } else {
-            (border_radius as f32 * scale_x).round() as u32
-        };
-
-        let radius_y = if border_radius as f32 * scale_y > height as f32 / 2.0 {
-            height / 2
-        } else {
-            (border_radius as f32 * scale_y).round() as u32
-        };
-
-        for x in (position.x.round() as i32)..=(position.x as i32 + width as i32) {
-            let mut start = Point::new(x, 0);
-            let mut end = Point::new(x, 0);
-
-            // Esquinas izquierdas
-            if x as f32 <= position.x + radius_x as f32 {
-                let top_center = Position {
-                    x: position.x + radius_x as f32,
-                    y: position.y + radius_y as f32,
-                };
-                let bottom_center = Position {
-                    x: position.x + radius_x as f32,
-                    y: position.y - radius_y as f32 + height as f32,
-                };
-                start.y = -self.elipse_top_arc(x, radius_x, radius_y, top_center)
-                    + position.y as i32
-                    + radius_y as i32;
-
-                end.y = self.elipse_top_arc(x, radius_x, radius_y, bottom_center)
-                    + position.y as i32
-                    - radius_y as i32
-                    + height as i32;
-            }
-            // Esquinas derechas
-            else if x as f32 >= position.x + width as f32 - radius_x as f32 {
-                let center = Position {
-                    x: position.x + width as f32 - radius_x as f32,
-                    y: position.y + radius_y as f32,
-                };
-
-                start.y = -self.elipse_top_arc(x, radius_x, radius_y, center)
-                    + position.y as i32
-                    + radius_y as i32;
-
-                end.y = self.elipse_top_arc(x, radius_x, radius_y, center)
-                    + position.y as i32
-                    + height as i32
-                    - radius_y as i32;
-            }
-            // Parte recta
-            else {
-                start.y = position.y.round() as i32;
-                end.y = position.y.round() as i32 + height as i32;
-            }
-
-            self.canvas
-                .draw_line(start, end)
-                .expect("Failed to draw line");
         }
     }
 
@@ -165,9 +87,9 @@ impl Renderer {
         let line_ac = (point_a, point_c);
 
         for x in point_a.x..=point_c.x {
-            let y_ab = self.line(x, line_ab);
-            let y_bc = self.line(x, line_bc);
-            let y_ac = self.line(x, line_ac);
+            let y_ab = line(x, line_ab);
+            let y_bc = line(x, line_bc);
+            let y_ac = line(x, line_ac);
 
             let start = Point::new(x, y_ac);
             let end = Point::new(x, y_ab.min(y_bc));
@@ -178,21 +100,94 @@ impl Renderer {
         }
     }
 
-    fn line(&self, x: i32, (p1, p2): (&Point, &Point)) -> i32 {
-        let dx = p2.x - p1.x;
-        if dx == 0 {
-            return p1.y.max(p2.y);
+    fn render_node(&mut self, id: NodeID, scene: &mut Scene) {
+        let mut node = scene
+            .get_node(id)
+            .expect("Internal invariant violated: render layer contains an invalid node ID");
+
+        let visual = *node.get_visual();
+
+        let color = node.get_visual().get_color();
+        self.canvas.set_draw_color(SdlColor {
+            r: color.r,
+            g: color.g,
+            b: color.b,
+            a: color.a,
+        });
+
+        let Size { width, height } = node.get_bounding_box_size();
+        let width = width as i32;
+        let height = height as i32;
+        let Position { x: pos_x, y: pos_y } = node.get_absolute_position();
+        let border_radius = visual.get_border_radius();
+        let Scale {
+            x: scale_x,
+            y: scale_y,
+        } = visual.get_scale();
+
+        let radius_x = if border_radius as f32 * scale_x > width as f32 / 2.0 {
+            width / 2
+        } else if border_radius as f32 * scale_y > height as f32 / 2.0 {
+            height / 2
+        } else {
+            (border_radius as f32 * scale_x).round() as i32
+        };
+
+        let radius_y = if border_radius as f32 * scale_x > width as f32 / 2.0 {
+            width / 2
+        } else if border_radius as f32 * scale_y > height as f32 / 2.0 {
+            height / 2
+        } else {
+            (border_radius as f32 * scale_y).round() as i32
+        };
+
+        for x in (pos_x)..=(pos_x + width as i32) {
+            let mut start = Point::new(x, 0);
+            let mut end = Point::new(x, 0);
+
+            // Esquinas izquierdas
+            if x <= pos_x + radius_x {
+                let top_center = Position {
+                    x: pos_x + radius_x,
+                    y: pos_y + radius_y,
+                };
+                let bottom_center = Position {
+                    x: pos_x + radius_x,
+                    y: pos_y - radius_y + height,
+                };
+                start.y = -elipse_top_arc(x, radius_x, radius_y, top_center) + pos_y + radius_y;
+
+                end.y = elipse_top_arc(x, radius_x, radius_y, bottom_center) + pos_y - radius_y
+                    + height;
+            }
+            // Esquinas derechas
+            else if x as i32 >= pos_x + width as i32 - radius_x as i32 {
+                let center = Position {
+                    x: pos_x + width as i32 - radius_x as i32,
+                    y: pos_y + radius_y as i32,
+                };
+
+                start.y =
+                    -elipse_top_arc(x, radius_x, radius_y, center) + pos_y as i32 + radius_y as i32;
+
+                end.y =
+                    elipse_top_arc(x, radius_x, radius_y, center) + pos_y as i32 + height as i32
+                        - radius_y as i32;
+            }
+            // Parte recta
+            else {
+                start.y = pos_y;
+                end.y = pos_y + height;
+            }
+
+            self.canvas
+                .draw_line(start, end)
+                .expect("Failed to draw line");
         }
-        let m = (p2.y - p1.y) as f32 / dx as f32;
-        (m * (x - p1.x) as f32 + p1.y as f32).round() as i32
+        self.render_text(id, scene);
     }
 
-    /// Doesn's include center.y
-    fn elipse_top_arc(&self, x: i32, radius_x: u32, radius_y: u32, center: Position) -> i32 {
-        let x = x as f32 - center.x;
-        let a = radius_x as f32;
-        let b = radius_y as f32;
-        let y = b * (1.0 - x * x / (a * a)).max(0.0).sqrt();
-        y.abs().round() as i32
+    fn render_text(&mut self, id: NodeID, scene: &mut Scene) {
+        let text = scene.storage().text.get_unchecked(id);
     }
 }

@@ -37,10 +37,7 @@ impl WindowManager {
                 SdlWindowEvent::Moved(x, y) => {
                     self.queue.push(WindowEvent::WindowMove(WindowMove {
                         window_id: *window_id,
-                        position: Position {
-                            x: *x as f32,
-                            y: *y as f32,
-                        },
+                        position: Position { x: *x, y: *y },
                     }));
                 }
                 SdlWindowEvent::Resized(w, h) => {

@@ -1,46 +1,43 @@
-use crate::util::Position;
+use crate::util::{Position, Scale};
 use std::ops::Add;
 
 #[derive(Debug, Clone, Copy)]
-pub struct Transform {
+pub struct NodeTransform {
     pub position: Position,
     pub position_absolute: bool,
     pub rotation: f32,
-    pub scale: (f32, f32),
+    pub scale: Scale,
     pub layer: Option<usize>,
 }
-impl Transform {
+impl NodeTransform {
     pub fn new() -> Self {
         Self {
             position: Position::new(),
             position_absolute: false,
             rotation: 0.0,
-            scale: (1.0, 1.0),
+            scale: Scale::new(),
             layer: None,
         }
     }
 }
-impl Add for Transform {
-    type Output = Transform;
+impl Add for NodeTransform {
+    type Output = NodeTransform;
     fn add(self, rhs: Self) -> Self::Output {
-        Transform {
+        NodeTransform {
             position: self.position + rhs.position,
             position_absolute: self.position_absolute,
             rotation: self.rotation + rhs.rotation,
-            scale: (self.scale.0 * rhs.scale.0, self.scale.1 * rhs.scale.1),
+            scale: Scale {
+                x: self.scale.x * rhs.scale.x,
+                y: self.scale.y * rhs.scale.y,
+            },
             layer: rhs.layer.or(self.layer),
         }
     }
 }
-impl Add<&Transform> for &Transform {
-    type Output = Transform;
-    fn add(self, rhs: &Transform) -> Transform {
+impl Add for &NodeTransform {
+    type Output = NodeTransform;
+    fn add(self, rhs: &NodeTransform) -> NodeTransform {
         *self + *rhs
-    }
-}
-
-impl Default for Transform {
-    fn default() -> Self {
-        Transform::new()
     }
 }

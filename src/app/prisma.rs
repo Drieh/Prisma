@@ -3,144 +3,23 @@ use std::{
     time::{Duration, Instant},
 };
 
-use sdl3::{VideoSubsystem, video::WindowFlags};
+use sdl3::{Sdl, VideoSubsystem, get_error as sdl_get_error};
+use sdl3_ttf_sys::ttf::{TTF_Init, TTF_Quit};
 
-use crate::render::Renderer;
-use crate::{app::error::PrismaError, scene::Scene};
-
-pub struct AppWindow {
-    scene: Scene,
-    renderer: Renderer,
-    id: u32,
-}
-impl AppWindow {
-    pub fn new(
-        video_subsystem: VideoSubsystem,
-        builder: WindowBuilder,
-        scene: Scene,
-    ) -> Result<Self, PrismaError> {
-        let mut binding = video_subsystem.window(&builder.title, builder.width, builder.height);
-
-        let mut window_builder: &mut sdl3::video::WindowBuilder = binding.set_flags(builder.flags);
-
-        if builder.is_pos_centered {
-            window_builder = window_builder.position_centered();
-        } else {
-            window_builder = window_builder.position(builder.x, builder.y);
-        }
-        let window = window_builder.build().unwrap();
-
-        Ok(Self {
-            id: window.id(),
-            renderer: Renderer::new(window.into_canvas()),
-            scene,
-        })
-    }
-
-    pub fn is_quitting(&self) -> bool {
-        self.scene.is_quitting()
-    }
-
-    pub fn draw(&mut self) {
-        self.renderer.draw(&mut self.scene);
-    }
-}
-pub struct WindowBuilder {
-    pub title: String,
-    pub flags: WindowFlags,
-    pub width: u32,
-    pub height: u32,
-    pub is_pos_centered: bool,
-    pub x: i32,
-    pub y: i32,
-}
-impl WindowBuilder {
-    pub fn new(title: &str) -> Self {
-        Self {
-            title: title.to_string(),
-            flags: WindowFlags::empty(),
-            x: 0,
-            y: 0,
-            is_pos_centered: false,
-            width: 100,
-            height: 100,
-        }
-    }
-
-    pub fn size(mut self, width: u32, height: u32) -> Self {
-        self.width = width;
-        self.height = height;
-        self
-    }
-    pub fn resizable(mut self) -> Self {
-        self.flags |= WindowFlags::RESIZABLE;
-        self
-    }
-    pub fn borderless(mut self) -> Self {
-        self.flags |= WindowFlags::BORDERLESS;
-
-        self
-    }
-    pub fn fullscreen(mut self) -> Self {
-        self.flags |= WindowFlags::FULLSCREEN;
-
-        self
-    }
-    pub fn position(mut self, x: i32, y: i32) -> Self {
-        self.x = x;
-        self.x = y;
-        self
-    }
-
-    /**
-     * This function overwrites position function.
-     */
-    pub fn position_centered(mut self) -> Self {
-        self.is_pos_centered = true;
-        self
-    }
-    /*
-    pub fn high_pixel_density(mut self) -> Self {
-        self.builder.high_pixel_density();
-        self
-    }
-    pub fn metal_view(mut self) -> Self {
-        self.builder.metal_view();
-        self
-    }
-    pub fn hidden(mut self) -> Self {
-        self.builder.hidden();
-        self
-    }
-    pub fn opengl(mut self) -> Self {
-        self.builder.opengl();
-        self
-    }
-    pub fn input_grabbed(mut self) -> Self {
-        self.builder.input_grabbed();
-        self
-    }
-    pub fn minimized(mut self) -> Self {
-        self.builder.minimized();
-        self
-    }
-    pub fn set_flags(mut self, flags: WindowFlags) -> Self {
-        self.builder.set_flags(flags);
-        self
-    }
-    pub fn vulkan(mut self) -> Self {
-        self.builder.vulkan();
-        self
-    }
-     */
-}
+use crate::{WindowBuilder, resources::ResourceManager};
+use crate::{
+    app::{error::PrismaError, window::AppWindow},
+    scene::Scene,
+};
 
 pub struct Prisma {
-    event_pump: sdl3::EventPump,
+    sdl_context: Sdl,
     windows: HashMap<u32, AppWindow>,
     running: bool,
     windows_close_queue: Vec<u32>,
+    resources: ResourceManager,
 }
+
 impl Prisma {
     /// Returns an app builder.
     /// Is the first step using Prisma.
@@ -148,14 +27,38 @@ impl Prisma {
     /// # Errors
     ///
     /// Returns [`PrismaError::InitError`] if there is any error in initialization.
-    pub fn builder() -> Result<AppBuilder, PrismaError> {
+    pub fn init() -> Result<Self, PrismaError> {
         let sdl_context = sdl3::init().map_err(|e| PrismaError::InitError(e.to_string()))?;
+        unsafe {
+            if !TTF_Init() {
+                return Err(PrismaError::InitError(sdl_get_error().to_string()));
+            }
+        }
 
-        let video_subsystem = sdl_context
+        Ok(Self {
+            sdl_context,
+            windows: HashMap::new(),
+            running: false,
+            windows_close_queue: Vec::new(),
+            resources: ResourceManager::new(),
+        })
+    }
+
+    pub fn add_window(&mut self, builder: WindowBuilder, scene: Scene) -> Result<(), PrismaError> {
+        let video_subsystem = self
+            .sdl_context
             .video()
             .map_err(|e| PrismaError::InitError(e.to_string()))?;
+        let window = AppWindow::new(video_subsystem, builder, scene)?;
+        self.windows.insert(window.id, window);
+        Ok(())
+    }
 
-        Ok(AppBuilder::new(video_subsystem, sdl_context))
+    fn quit(&self) {
+        // SDL_Quit() is called when `sdl_context` is dropped.
+        unsafe {
+            TTF_Quit();
+        }
     }
 
     /// Runs the app
@@ -164,53 +67,49 @@ impl Prisma {
     ///
     /// Returns [`PrismaError`] if there is any error during runtime.
     pub fn run(mut self) -> Result<(), PrismaError> {
-        self.running = true;
+        let mut event_pump = self
+            .sdl_context
+            .event_pump()
+            .map_err(|e| PrismaError::InitError(e.to_string()))?;
         let frame_time = Duration::from_millis(1000 / 60);
+        self.running = true;
+        self.resources.load_resources()?;
 
         while self.running {
             let frame_start = Instant::now();
             let windows_close_queue = std::mem::take(&mut self.windows_close_queue);
 
             for app_window in self.windows.values_mut() {
-                app_window
-                    .scene
-                    .manage_lifecycle_events()
-                    .expect("Error in lifecycle");
-            }
-
-            // events
-            for sdl_event in self.event_pump.poll_iter() {
-                for app_window in self.windows.values_mut() {
+                /* events */
+                app_window.scene.manage_lifecycle_events()?;
+                for sdl_event in event_pump.poll_iter() {
                     if let Some(window_id) = sdl_event.get_window_id()
                         && window_id == app_window.id
                     {
-                        app_window
-                            .scene
-                            .manage_sdl_events(&sdl_event)
-                            .expect("Error in user events");
+                        app_window.scene.manage_sdl_events(&sdl_event)?;
                     }
                 }
-            }
-            // window close management
-            for window_id in self.windows.keys().clone() {
-                if self.windows.get(window_id).unwrap().is_quitting() {
-                    self.windows_close_queue.push(*window_id);
+
+                /* closing queue */
+                if app_window.is_quitting() {
+                    self.windows_close_queue.push(app_window.id);
                 }
+
+                /* render */
+                app_window.draw(&mut self.resources);
             }
+
+            /* window close */
             for window_id in windows_close_queue {
                 self.windows.remove(&window_id);
             }
 
-            // render
-            for app_window in self.windows.values_mut() {
-                app_window.draw();
-            }
-
-            // closing app
+            /* closing app */
             if self.windows.is_empty() {
                 self.running = false;
             }
 
+            /* frame control */
             let elapsed = frame_start.elapsed();
             if elapsed < frame_time {
                 std::thread::sleep(frame_time - elapsed);
@@ -220,48 +119,8 @@ impl Prisma {
     }
 }
 
-/// A builder used to configure and create a [`Prisma`] application.
-pub struct AppBuilder {
-    video_subsystem: VideoSubsystem,
-    sdl_context: sdl3::Sdl,
-    windows: Vec<AppWindow>,
-}
-impl AppBuilder {
-    pub fn new(video_subsystem: VideoSubsystem, sdl_context: sdl3::Sdl) -> Self {
-        Self {
-            video_subsystem,
-            sdl_context,
-            windows: Vec::new(),
-        }
-    }
-
-    pub fn window(
-        mut self,
-        window_builder: WindowBuilder,
-        scene: Scene,
-    ) -> Result<Self, PrismaError> {
-        let window = AppWindow::new(self.video_subsystem.clone(), window_builder, scene)?;
-
-        self.windows.push(window);
-
-        Ok(self)
-    }
-
-    pub fn build(self) -> Result<Prisma, PrismaError> {
-        let windows = self
-            .windows
-            .into_iter()
-            .map(|window| (window.id, window))
-            .collect();
-
-        Ok(Prisma {
-            event_pump: self
-                .sdl_context
-                .event_pump()
-                .map_err(|e| PrismaError::InitError(e.to_string()))?,
-            windows,
-            running: false,
-            windows_close_queue: Vec::new(),
-        })
+impl Drop for Prisma {
+    fn drop(&mut self) {
+        self.quit();
     }
 }

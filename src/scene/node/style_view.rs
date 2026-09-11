@@ -1,50 +1,42 @@
-use std::time::Duration;
-
 use crate::{
-    node::{Action, ActionQueue, NodeAction},
+    node::{ActionOrigin, component::NodeQueue, node_action::StyleAction},
     util::{Color, Position},
 };
 
 pub type StyleCallback = dyn FnMut(&mut StyleView<'_>) + 'static;
+
 pub struct StyleView<'a> {
-    action_queue: &'a mut ActionQueue,
-    persistent: bool,
+    queue: &'a mut NodeQueue,
+    origin: ActionOrigin,
 }
 impl<'a> StyleView<'a> {
-    pub(crate) fn new(action_queue: &'a mut ActionQueue, persistent: bool) -> Self {
-        Self {
-            action_queue,
-            persistent,
-        }
+    pub(crate) fn new(queue: &'a mut NodeQueue, origin: ActionOrigin) -> Self {
+        Self { queue, origin }
+    }
+
+    fn push_action(&mut self, action: StyleAction) {
+        self.queue.push_back::<StyleAction>(action, self.origin);
     }
 
     /// Sets the node's position to the given `x` and `y`.
     ///
     /// Returns a mutable reference to [`Self`]
-    pub fn position(&mut self, x: i32, y: i32) {
-        let x = x as f32;
-        let y = y as f32;
-
-        self.action_queue.push_back(NodeAction::new(
-            Action::Position {
-                position: Some(Position { x, y }),
-                absolute: None,
-            },
-            self.persistent,
-        ));
+    pub fn position(&mut self, x: i32, y: i32) -> &mut Self {
+        self.push_action(StyleAction::Position {
+            position: Some(Position { x, y }),
+            absolute: None,
+        });
+        self
     }
 
     /// Sets the node's position as an absolute position relative to the scene.
     ///
     /// Returns a mutable reference to [`Self`].
     pub fn position_absolute(&mut self) -> &mut Self {
-        self.action_queue.push_back(NodeAction::new(
-            Action::Position {
-                position: None,
-                absolute: Some(true),
-            },
-            self.persistent,
-        ));
+        self.push_action(StyleAction::Position {
+            position: None,
+            absolute: Some(true),
+        });
         self
     }
 
@@ -52,13 +44,10 @@ impl<'a> StyleView<'a> {
     ///
     /// Returns a mutable reference to [`Self`].
     pub fn position_relative(&mut self) -> &mut Self {
-        self.action_queue.push_back(NodeAction::new(
-            Action::Position {
-                position: None,
-                absolute: Some(false),
-            },
-            self.persistent,
-        ));
+        self.push_action(StyleAction::Position {
+            position: None,
+            absolute: Some(false),
+        });
         self
     }
 
@@ -66,8 +55,7 @@ impl<'a> StyleView<'a> {
     ///
     /// Returns a mutable reference to [`Self`].
     pub fn scale(&mut self, x: f32, y: f32) -> &mut Self {
-        self.action_queue
-            .push_back(NodeAction::new(Action::Scale { x, y }, self.persistent));
+        self.push_action(StyleAction::Scale { x, y });
         self
     }
 
@@ -75,10 +63,7 @@ impl<'a> StyleView<'a> {
     ///
     /// Returns a mutable reference to [`Self`].
     pub fn size(&mut self, width: u32, height: u32) -> &mut Self {
-        self.action_queue.push_back(NodeAction::new(
-            Action::Size { width, height },
-            self.persistent,
-        ));
+        self.push_action(StyleAction::Size { width, height });
         self
     }
 
@@ -86,8 +71,7 @@ impl<'a> StyleView<'a> {
     ///
     /// Returns a mutable reference to [`Self`].
     pub fn bg_color(&mut self, color: Color) -> &mut Self {
-        self.action_queue
-            .push_back(NodeAction::new(Action::BGColor { color }, self.persistent));
+        self.push_action(StyleAction::BGColor { color });
         self
     }
 
@@ -97,8 +81,7 @@ impl<'a> StyleView<'a> {
     ///
     /// Returns a mutable reference to [`Self`].
     pub fn layer(&mut self, layer: usize) -> &mut Self {
-        self.action_queue
-            .push_back(NodeAction::new(Action::Layer { layer }, self.persistent));
+        self.push_action(StyleAction::Layer { layer });
         self
     }
 
@@ -106,21 +89,13 @@ impl<'a> StyleView<'a> {
     ///
     /// Returns a mutable reference to [`Self`].
     pub fn border_radius(&mut self, radius: u32) -> &mut Self {
-        self.action_queue.push_back(NodeAction::new(
-            Action::BorderRadius { radius },
-            self.persistent,
-        ));
+        self.push_action(StyleAction::BorderRadius { radius });
         self
     }
 
     /// Adds a timer to the node's [`NodeAction`] queue, delaying the execution of its actions.
     pub(crate) fn wait(&mut self, ms: u64) -> &mut Self {
-        self.action_queue.push_back(NodeAction::new(
-            Action::Wait {
-                duration: Duration::from_millis(ms),
-            },
-            false,
-        ));
+        self.push_action(StyleAction::Wait { ms });
         self
     }
 }

@@ -1,6 +1,7 @@
 mod app;
 pub mod event;
 mod render;
+mod resources;
 mod scene;
 pub mod util;
 

@@ -1,66 +1,60 @@
-use std::{collections::HashMap, time::Instant};
+use std::collections::HashMap;
 
 use crate::{
     error::PrismaError,
-    node::{Action, NodeAction},
+    node::{
+        ActionOrigin,
+        component::{NodeQueue, NodeText, NodeVisual},
+    },
     scene::{
         NodeID,
         node::{
-            ActionQueue, ListenerQueue, NodeListenerAction, NodeView,
-            components::{NodeState, Style, Transform, Tree},
+            NodeView,
+            component::{NodeState, NodeTree},
         },
         storage::{
-            ActionQueueHandler, ListenerQueueHandler, StateHandler, StorageHandler, StyleHandler,
-            TransformHandler, TreeHandler,
+            StorageHandler,
+            handler::{QueueHandler, StateHandler, TextHandler, TreeHandler, VisualStateHandler},
         },
     },
 };
 
 pub struct NodeStorage {
-    tree: HashMap<NodeID, Tree>,
-    style: HashMap<NodeID, Style>,
+    tree: HashMap<NodeID, NodeTree>,
+    visual_state: HashMap<NodeID, NodeVisual>,
     state: HashMap<NodeID, NodeState>,
-    transform: HashMap<NodeID, Transform>,
-    action_queue: HashMap<NodeID, ActionQueue>,
-    listener_queue: HashMap<NodeID, ListenerQueue>,
+    queue: HashMap<NodeID, NodeQueue>,
+    text: HashMap<NodeID, NodeText>,
 }
 impl NodeStorage {
     pub(crate) fn new() -> Self {
         Self {
             tree: HashMap::new(),
-            style: HashMap::new(),
             state: HashMap::new(),
-            transform: HashMap::new(),
-            action_queue: HashMap::new(),
-            listener_queue: HashMap::new(),
+            visual_state: HashMap::new(),
+            queue: HashMap::new(),
+            text: HashMap::new(),
         }
     }
 
-    pub fn new_node(&mut self) -> NodeView<'_> {
+    pub fn new_node(&mut self, origin: ActionOrigin) -> NodeView<'_> {
         let id = NodeID::next();
-
         self.storage().insert_context(id);
-
-        self.get_node_view(id).expect("Node creation failed!")
+        self.get_node_view(id, origin)
+            .expect("Node creation failed!")
     }
 
-    pub fn exists(&self, id: NodeID) -> bool {
-        self.tree.contains_key(&id)
-            && self.state.contains_key(&id)
-            && self.transform.contains_key(&id)
-            && self.style.contains_key(&id)
-            && self.action_queue.contains_key(&id)
-            && self.listener_queue.contains_key(&id)
+    pub fn exists(&mut self, id: NodeID) -> bool {
+        self.storage().has_node(id)
     }
 
     pub fn storage(&mut self) -> StorageHandler<'_> {
         StorageHandler {
             tree: TreeHandler::new(&mut self.tree),
             state: StateHandler::new(&mut self.state),
-            transform: TransformHandler::new(&mut self.transform),
-            style: StyleHandler::new(&mut self.style),
-            action_queue: ActionQueueHandler::new(&mut self.action_queue),
-            listener_queue: ListenerQueueHandler::new(&mut self.listener_queue),
+            queue: QueueHandler::new(&mut self.queue),
+            text: TextHandler::new(&mut self.text),
+            visual: VisualStateHandler::new(&mut self.visual_state),
         }
     }
 
@@ -68,8 +62,12 @@ impl NodeStorage {
         StateHandler::new(&mut self.state)
     }
 
-    pub fn get_node_view(&mut self, id: NodeID) -> Result<NodeView<'_>, PrismaError> {
-        NodeView::new(id, self)
+    pub fn get_node_view(
+        &mut self,
+        id: NodeID,
+        origin: ActionOrigin,
+    ) -> Result<NodeView<'_>, PrismaError> {
+        NodeView::new(id, self, origin)
     }
 
     pub fn get_nodes_id(&self) -> Vec<NodeID> {
@@ -83,9 +81,5 @@ impl NodeStorage {
 
         self.storage().remove_context(id);
         Ok(())
-    }
-
-    pub(crate) fn take_listener_queue(&mut self, id: NodeID) -> Vec<NodeListenerAction> {
-        std::mem::take(self.listener_queue.get_mut(&id).unwrap())
     }
 }

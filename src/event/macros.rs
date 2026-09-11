@@ -1,3 +1,13 @@
+macro_rules! bubbles_by_default {
+    ($value:expr) => {
+        $value
+    };
+    () => {
+        false
+    };
+}
+pub(crate) use bubbles_by_default;
+
 macro_rules! define_events {
     (
         $(
@@ -5,6 +15,7 @@ macro_rules! define_events {
             {
                 $(
                     $variant:ident as $name:ident {
+                        $(bubbles_by_default: $bubbles_by_default:expr,)?
                         $(
                             $field:ident : $ty:ty
                         ),* $(,)?
@@ -58,6 +69,58 @@ macro_rules! define_events {
                     }
                 );
             )*
+        impl EventType {
+            pub fn bubbles_by_default(&self) -> bool {
+                match self {
+                    $(
+                        $(
+                            Self::$family($event_type_enum::$variant) => {
+                                bubbles_by_default!($($bubbles_by_default)?)
+                            },
+                        )*
+                    )*
+                    Self::Quit
+                    | Self::AppCloseRequest
+                    | Self::CancelAppCloseRequest => false,
+                }
+            }
+
+            pub fn get_kind(&self) -> EventKind {
+                match self {
+                    $(
+                        Self::$family(..) => EventKind::$family,
+                    )*
+                    Self::Quit => EventKind::Quit,
+                    Self::AppCloseRequest => EventKind::AppCloseRequest,
+                    Self::CancelAppCloseRequest => EventKind::CancelAppCloseRequest,
+                }
+            }
+        }
+
+        impl Event {
+            pub fn get_type(&self) -> EventType {
+                match self {
+                    Event::Mouse(event) => EventType::Mouse(event.event_type()),
+                    Event::Window(event) => EventType::Window(event.event_type()),
+                    Event::Lifecycle(event) => EventType::Lifecycle(event.event_type()),
+                    Event::AppCloseRequest => EventType::AppCloseRequest,
+                    Event::CancelAppCloseRequest => EventType::CancelAppCloseRequest,
+                    Event::Quit => EventType::Quit,
+                }
+            }
+
+            pub fn get_kind(&self) -> EventKind {
+                match self {
+                    Event::Mouse { .. } => EventKind::Mouse,
+                    Event::Window { .. } => EventKind::Window,
+                    Event::Lifecycle { .. } => EventKind::Lifecycle,
+                    Event::AppCloseRequest => EventKind::AppCloseRequest,
+                    Event::CancelAppCloseRequest => EventKind::CancelAppCloseRequest,
+                    Event::Quit => EventKind::Quit,
+                }
+            }
+        }
+
 
     };
 }

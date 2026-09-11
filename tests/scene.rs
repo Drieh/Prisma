@@ -7,7 +7,7 @@ fn scene_contains() {
     let id = scene.new_node().get_id();
 
     assert!(scene.contains(id));
-    assert!(!scene.contains(NodeID::id(123)));
+    assert_eq!(scene.contains(NodeID::id(123)), false);
 }
 
 #[test]
@@ -29,9 +29,9 @@ fn store_and_recover_state() {
 
     let mut node = scene.new_node();
 
-    node.set_state("key", 1);
+    node.set_state::<i32>(1);
 
-    assert!(node.get_state::<i32>("key").is_ok());
-    assert_eq!(*node.get_state::<i32>("key").unwrap(), 1);
-    assert!(node.get_state::<i32>("key2").is_err());
+    assert!(node.get_state::<i8>().is_err());
+    assert!(node.get_state::<i32>().is_ok());
+    assert_eq!(node.remove_state::<i32>().unwrap(), 1);
 }

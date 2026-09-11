@@ -1,17 +1,20 @@
 use std::time::Instant;
 
 use crate::error::PrismaError;
+use crate::event::EventCallbackID;
 use crate::event::EventData;
+use crate::event::EventManager;
 use crate::event::context::CloseRequest;
 use crate::event::context::EventContext;
-use crate::event::event_manager::CallbackID;
-use crate::event::{EventManager, EventType};
+use crate::node::Action;
+use crate::node::ActionOrigin;
+use crate::node::EventListenerAction;
+use crate::node::NodeTreeAction;
+use crate::node::StyleAction;
 use crate::node::StyleView;
 use crate::scene::NodeID;
 use crate::scene::NodeView;
-use crate::scene::node::NodeListenerAction;
-use crate::scene::storage::NodeStorage;
-use crate::scene::storage::StorageHandler;
+use crate::scene::storage::{NodeStorage, StorageHandler};
 use crate::util::Color;
 
 struct CloseHandler {
@@ -106,17 +109,21 @@ impl Scene {
         }
     }
 
+    pub fn storage(&mut self) -> StorageHandler<'_> {
+        self.nodes.storage()
+    }
+
     /// Creates a new node and returns a mutable [`NodeView`] to it.
     ///
-    /// The returned view can be used to configure the node before or after the scene is running.
+    /// The returned view can be used to configure the node before or after Prisma is running.
     pub fn new_node(&mut self) -> NodeView<'_> {
-        let new_node = self.nodes.new_node();
+        let new_node = self.nodes.new_node(ActionOrigin::Code);
         self.pending_nodes_handler.push_created(new_node.get_id());
         new_node
     }
 
     /// Returns `true` if the scene contains a node with the given ID.
-    pub fn contains(&self, id: NodeID) -> bool {
+    pub fn contains(&mut self, id: NodeID) -> bool {
         self.nodes.exists(id)
     }
 
@@ -131,7 +138,7 @@ impl Scene {
     ///
     /// Returns [`PrismaError::NodeNotFound`] if there is no node for the given [`NodeID`].
     pub fn get_node(&mut self, id: NodeID) -> Result<NodeView<'_>, PrismaError> {
-        self.nodes.get_node_view(id)
+        self.nodes.get_node_view(id, ActionOrigin::Code)
     }
 
     /// Registers a callback for the given event type.
@@ -153,7 +160,7 @@ impl Scene {
     }
 
     /// Removes the callback identified by the given [`CallbackID`].
-    pub fn off_event(&mut self, target: CallbackID) {
+    pub fn off_event(&mut self, target: EventCallbackID) {
         self.event_manager.remove_event_listener(target);
     }
 
@@ -207,7 +214,6 @@ impl Scene {
 
         self.event_manager.dispatch(&mut context);
 
-        //context.process_node_actions(&mut self.event_manager)?;
         context.process_context_actions(&mut self.event_manager)?;
 
         self.pending_nodes_handler.extend_pending(&mut context);
@@ -220,92 +226,154 @@ impl Scene {
 
     fn process_nodes(&mut self) {
         let nodes_id = self.nodes.get_nodes_id();
-        let StorageHandler {
-            mut action_queue,
-            mut listener_queue,
-            mut state,
-            mut style,
-            mut transform,
-            tree,
-        } = self.nodes.storage();
+
         for id in nodes_id {
-            /* apply listeners actions */
-            let listener_actions = std::mem::take(listener_queue.get_unchecked_mut(id));
-            for listener_action in listener_actions {
-                match listener_action {
-                    NodeListenerAction::Add {
-                        event_type,
-                        callback,
-                    } => {
-                        self.event_manager
-                            .add_node_event_listener(id, event_type, callback);
+            self.process_node_event_listener_actions(id);
+            self.process_node_destruction_queue(id);
+            self.process_node_style_actions(id);
+        }
+    }
+
+    fn process_node_event_listener_actions(&mut self, id: NodeID) {
+        let StorageHandler { mut queue, .. } = self.nodes.storage();
+        while let Some(listener_action) = queue
+            .get_unchecked_mut(id)
+            .pop_front::<EventListenerAction>()
+        {
+            match listener_action {
+                EventListenerAction::Add {
+                    event_type,
+                    callback,
+                } => {
+                    self.event_manager
+                        .add_node_event_listener(id, event_type, callback.callback);
+                }
+                EventListenerAction::Remove { target } => {
+                    self.event_manager.remove_event_listener(target);
+                }
+            }
+        }
+    }
+
+    fn process_node_style_actions(&mut self, id: NodeID) {
+        let StorageHandler {
+            mut state,
+            mut queue,
+            mut visual,
+            ..
+        } = self.nodes.storage();
+        let node_state = state.get_unchecked_mut(id);
+        let node_visual = visual.get_unchecked_mut(id);
+        let node_queue = queue.get_unchecked_mut(id);
+
+        let is_hovered = self.event_manager.is_node_hovered(id);
+        let is_active = self.event_manager.is_node_active(id);
+
+        if is_hovered && let Some(style_callback) = &mut node_state.on_hover {
+            let mut style = StyleView::new(node_queue, ActionOrigin::Visual);
+            style_callback(&mut style);
+        }
+
+        if is_active && let Some(style_callback) = &mut node_state.on_active {
+            let mut style = StyleView::new(node_queue, ActionOrigin::Visual);
+            style_callback(&mut style);
+        }
+
+        if let Some(timer) = node_visual.get_timer()
+            && let Some(start) = node_visual.get_timer_start()
+        {
+            if Instant::now() >= start + timer {
+                return;
+            }
+            node_visual.clear_timer();
+        }
+
+        node_visual.set_normal();
+        while let Some(Action::Style {
+            action: style_action,
+            origin,
+        }) = node_queue.pop_front_action::<StyleAction>()
+        {
+            match origin {
+                ActionOrigin::Visual => {
+                    if is_hovered {
+                        node_visual.set_hover();
                     }
-                    NodeListenerAction::Remove { target } => {
-                        self.event_manager.remove_event_listener(target);
+                    if is_active {
+                        node_visual.set_active();
                     }
                 }
+                _ => {}
             }
 
-            /* destruction queue */
-
-            if state.get_unchecked(id).destruction_requested {
-                let family = tree
-                    .get_family(id)
-                    .expect("Invariant violation: nodes contains an invalid ID");
-                for familiar in family {
-                    if !self.pending_nodes_handler.destroyed_contains(familiar) {
-                        self.pending_nodes_handler.push_destroyed(familiar);
+            match style_action {
+                StyleAction::BGColor { color } => {
+                    node_visual.set_color(color);
+                }
+                StyleAction::Layer { layer } => {
+                    node_visual.set_layer(layer);
+                }
+                StyleAction::BorderRadius { radius } => {
+                    node_visual.set_border_radius(radius);
+                }
+                StyleAction::Scale { x, y } => {
+                    node_visual.set_scale(x, y);
+                }
+                StyleAction::Position { position, absolute } => {
+                    if let Some(value) = position {
+                        node_visual.set_position(value);
+                    }
+                    if let Some(value) = absolute {
+                        if value {
+                            node_visual.set_position_absolute();
+                        } else {
+                            node_visual.set_position_relative();
+                        }
                     }
                 }
-            }
-
-            /* apply node visual changes */
-
-            let hovered = self.event_manager.is_node_hovered(id);
-            let active = self.event_manager.is_node_active(id);
-
-            for action in state.get_unchecked(id).og_style.clone().values() {
-                action.apply_action(
-                    style.get_unchecked_mut(id),
-                    transform.get_unchecked_mut(id),
-                    state.get_unchecked_mut(id),
-                );
-            }
-            if hovered {
-                if let Some(style_callback) = &mut state.get_unchecked_mut(id).on_hover {
-                    let mut style = StyleView::new(action_queue.get_unchecked_mut(id), false);
-
-                    style_callback(&mut style);
+                StyleAction::Size { width, height } => {
+                    node_visual.set_size(width, height);
+                }
+                StyleAction::Wait { ms } => {
+                    node_visual.set_timer(ms);
+                    break;
                 }
             }
-            if active {
-                if let Some(style_callback) = &mut state.get_unchecked_mut(id).on_active {
-                    let mut style = StyleView::new(action_queue.get_unchecked_mut(id), false);
+        }
+    }
 
-                    style_callback(&mut style);
+    fn process_node_destruction_queue(&mut self, id: NodeID) {
+        let node = self.get_node(id).unwrap();
+        if node.get_node_state().destruction_requested {
+            let family = node
+                .get_family(id)
+                .expect("Invariant violation: nodes contains an invalid ID");
+            for familiar in family {
+                if !self.pending_nodes_handler.destroyed_contains(familiar) {
+                    self.pending_nodes_handler.push_destroyed(familiar);
                 }
             }
+        }
+    }
 
-            let now = Instant::now();
-            if let Some(until) = state.get_unchecked(id).waiting_until {
-                if now < until {
-                    return;
-                } else {
-                    state.get_unchecked_mut(id).waiting_until = None;
+    fn process_node_tree_actions(&mut self, id: NodeID) {
+        let StorageHandler {
+            mut tree,
+            mut queue,
+            ..
+        } = self.nodes.storage();
+        let node_queue = queue.get_unchecked_mut(id);
+        let node_tree = tree.get_unchecked_mut(id);
+        while let Some(action) = node_queue.pop_front::<NodeTreeAction>() {
+            match action {
+                NodeTreeAction::AddChild { child } => {
+                    node_tree.add_child(child);
                 }
-            }
-
-            while let Some(node_action) = action_queue.get_unchecked_mut(id).pop_front() {
-                node_action.apply_action(
-                    style.get_unchecked_mut(id),
-                    transform.get_unchecked_mut(id),
-                    state.get_unchecked_mut(id),
-                );
-                if node_action.is_persistent() {
-                    state
-                        .get_unchecked_mut(id)
-                        .og_style
-                        .insert(node_action.get_type(), node_action);
+                NodeTreeAction::RemoveChild { child } => {
+                    node_tree.remove_child(child);
+                }
+                NodeTreeAction::SetParent { parent } => {
+                    node_tree.set_parent(parent);
                 }
             }
         }

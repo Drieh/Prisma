@@ -1,5 +1,6 @@
 pub mod error;
 mod prisma;
+mod window;
 
 pub use prisma::Prisma;
-pub use prisma::WindowBuilder;
+pub use window::WindowBuilder;

@@ -9,7 +9,7 @@ use crate::{
     util::Position,
 };
 
-const DRAG_TOLERANCE: f32 = 5.0;
+const DRAG_TOLERANCE: i32 = 5;
 pub struct MouseManager {
     position: Position,
     last_down_position: HashMap<MouseButton, Position>,
@@ -20,7 +20,7 @@ impl MouseManager {
     pub fn new() -> Self {
         Self {
             is_dragging: HashSet::new(),
-            position: Position { x: 0.0, y: 0.0 },
+            position: Position { x: 0, y: 0 },
             last_down_position: HashMap::new(),
             queue: Vec::new(),
         }
@@ -46,11 +46,15 @@ impl MouseManager {
                 ..
             } => {
                 let mouse_btn = self.match_sdl_mouse_button(sdl_mouse_btn);
-                self.position = Position { x, y };
-                self.last_down_position.insert(mouse_btn, Position { x, y });
+                let position = Position {
+                    x: x.round() as i32,
+                    y: y.round() as i32,
+                };
+                self.position = position;
+                self.last_down_position.insert(mouse_btn, position);
 
                 self.queue.push(MouseEvent::MouseDown(MouseDown {
-                    position: Position { x, y },
+                    position,
                     mouse_btn,
                 }));
             }
@@ -62,15 +66,18 @@ impl MouseManager {
                 ..
             } => {
                 let mouse_btn = self.match_sdl_mouse_button(sdl_mouse_btn);
-
+                let position = Position {
+                    x: x.round() as i32,
+                    y: y.round() as i32,
+                };
                 if self.is_dragging.contains(&mouse_btn) {
                     self.queue.push(MouseEvent::MouseDragEnd(DragEnd {
-                        position: Position { x, y },
+                        position,
                         mouse_btn,
                     }));
                 } else if self.last_down_position.contains_key(&mouse_btn) {
                     self.queue.push(MouseEvent::MouseClick(Click {
-                        position: Position { x, y },
+                        position,
                         mouse_btn,
                     }));
                 }
@@ -78,30 +85,33 @@ impl MouseManager {
                 self.last_down_position.remove(&mouse_btn);
 
                 self.queue.push(MouseEvent::MouseUp(MouseUp {
-                    position: Position { x, y },
+                    position,
                     mouse_btn,
                 }));
-                self.position = Position { x, y };
+                self.position = position;
             }
 
             SdlEvent::MouseMotion { x, y, .. } => {
-                self.position = Position { x, y };
-                self.queue.push(MouseEvent::MouseMove(MouseMove {
-                    position: Position { x, y },
-                }));
+                let position = Position {
+                    x: x.round() as i32,
+                    y: y.round() as i32,
+                };
+                self.position = position;
+                self.queue
+                    .push(MouseEvent::MouseMove(MouseMove { position }));
                 for (button, down_position) in &self.last_down_position {
                     let Position {
                         x: down_position_x,
                         y: down_position_y,
                     } = *down_position;
 
-                    let dx = x - down_position_x;
-                    let dy = y - down_position_y;
+                    let dx = position.x - down_position_x;
+                    let dy = position.y - down_position_y;
 
                     if dx * dx + dy * dy > DRAG_TOLERANCE * DRAG_TOLERANCE {
                         if self.is_dragging.contains(button) {
                             self.queue.push(MouseEvent::MouseDrag(Drag {
-                                position: Position { x, y },
+                                position,
                                 mouse_btn: *button,
                             }));
                         } else {
