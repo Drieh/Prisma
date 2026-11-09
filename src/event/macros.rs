@@ -8,7 +8,7 @@ macro_rules! bubbles_by_default {
 }
 pub(crate) use bubbles_by_default;
 
-macro_rules! define_events {
+macro_rules! define_event {
     (
         $(
             $family:ident as $event_enum:ident, $event_type_enum:ident
@@ -24,11 +24,46 @@ macro_rules! define_events {
             }
         )* $(,)?
     ) => {
+        pub trait EventData: Sized {
+            const TYPE: EventType;
+
+            fn cast(event: Event) -> Option<Self>;
+        }
+
+        #[derive(Eq, Hash, PartialEq, Clone, Copy, Debug)]
+        pub struct EventCallbackID(u32);
+        static NEXT_LISTENER_ID: AtomicU32 = AtomicU32::new(0);
+        impl EventCallbackID {
+            pub(crate) fn next() -> Self {
+                Self(NEXT_LISTENER_ID.fetch_add(1, Ordering::Relaxed))
+            }
+        }
+        impl Display for EventCallbackID {
+            fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+                write!(f, "{}", self.0)
+            }
+        }
+
+        pub(crate) struct EventCallback {
+            pub callback: Box<dyn FnMut(&mut EventContext) + 'static>,
+        }
+        impl EventCallback {
+            pub fn new<F>(callback: F) -> Self
+            where
+                F: FnMut(&mut EventContext) + 'static,
+            {
+                Self {
+                    callback: Box::new(callback),
+                }
+            }
+
+            pub fn execute(&mut self, context: &mut EventContext) {
+                (self.callback)(context);
+            }
+        }
+
         #[derive(Hash, Eq, PartialEq, Clone, Copy, Debug)]
         pub enum EventKind {
-            Quit,
-            AppCloseRequest,
-            CancelAppCloseRequest,
             $(
                 $family,
             )*
@@ -36,9 +71,6 @@ macro_rules! define_events {
 
         #[derive(Hash, Eq, PartialEq, Clone, Copy, Debug)]
         pub enum EventType {
-            Quit,
-            AppCloseRequest,
-            CancelAppCloseRequest,
             $(
                 $family($event_type_enum),
             )*
@@ -46,9 +78,6 @@ macro_rules! define_events {
 
         #[derive(Clone, Copy, Debug, PartialEq)]
         pub enum Event {
-            Quit,
-            AppCloseRequest,
-            CancelAppCloseRequest,
             $(
                 $family($event_enum),
             )*
@@ -79,9 +108,6 @@ macro_rules! define_events {
                             },
                         )*
                     )*
-                    Self::Quit
-                    | Self::AppCloseRequest
-                    | Self::CancelAppCloseRequest => false,
                 }
             }
 
@@ -90,9 +116,6 @@ macro_rules! define_events {
                     $(
                         Self::$family(..) => EventKind::$family,
                     )*
-                    Self::Quit => EventKind::Quit,
-                    Self::AppCloseRequest => EventKind::AppCloseRequest,
-                    Self::CancelAppCloseRequest => EventKind::CancelAppCloseRequest,
                 }
             }
         }
@@ -100,23 +123,17 @@ macro_rules! define_events {
         impl Event {
             pub fn get_type(&self) -> EventType {
                 match self {
-                    Event::Mouse(event) => EventType::Mouse(event.event_type()),
-                    Event::Window(event) => EventType::Window(event.event_type()),
-                    Event::Lifecycle(event) => EventType::Lifecycle(event.event_type()),
-                    Event::AppCloseRequest => EventType::AppCloseRequest,
-                    Event::CancelAppCloseRequest => EventType::CancelAppCloseRequest,
-                    Event::Quit => EventType::Quit,
+                    $(
+                        Event::$family(event) => EventType::$family(event.event_type()),
+                    )*
                 }
             }
 
             pub fn get_kind(&self) -> EventKind {
                 match self {
-                    Event::Mouse { .. } => EventKind::Mouse,
-                    Event::Window { .. } => EventKind::Window,
-                    Event::Lifecycle { .. } => EventKind::Lifecycle,
-                    Event::AppCloseRequest => EventKind::AppCloseRequest,
-                    Event::CancelAppCloseRequest => EventKind::CancelAppCloseRequest,
-                    Event::Quit => EventKind::Quit,
+                    $(
+                        Event::$family { .. } => EventKind::$family,
+                    )*
                 }
             }
         }
@@ -124,7 +141,7 @@ macro_rules! define_events {
 
     };
 }
-pub(crate) use define_events;
+pub(crate) use define_event;
 
 macro_rules! define_event_family {
     (

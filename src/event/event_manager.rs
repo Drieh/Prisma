@@ -1,3 +1,6 @@
+use crate::app::CloseRequest;
+use crate::event::CancelClose;
+use crate::event::CloseRequest as CloseRequestEvent;
 use crate::event::EventCallback;
 use crate::event::EventCallbackID;
 use crate::event::LifecycleEvent;
@@ -5,7 +8,8 @@ use crate::event::LifecycleEventType;
 use crate::event::MouseEnter;
 use crate::event::MouseEvent;
 use crate::event::MouseLeave;
-use crate::event::context::CloseRequest;
+use crate::event::Quit;
+use crate::event::SystemEvent;
 use crate::event::context::EventContext;
 use crate::event::context::PropagationState;
 use crate::event::manager::LifecycleManager;
@@ -85,54 +89,47 @@ impl EventManager {
         self.quitting = true;
     }
 
-    pub fn add_node_event_listener<F>(
+    pub fn node_on_event(
         &mut self,
         node_id: NodeID,
         event_type: EventType,
-        callback: F,
-    ) -> EventCallbackID
-    where
-        F: FnMut(&mut EventContext) + 'static,
-    {
+        callback: EventCallback,
+    ) -> EventCallbackID {
         let id = EventCallbackID::next();
         self.node_event_listeners
             .entry(node_id)
             .or_default()
             .entry(event_type)
             .or_default()
-            .insert(
-                id,
-                EventCallback {
-                    callback: Box::new(callback),
-                },
-            );
+            .insert(id, callback);
 
         self.node_listeners_lookup.insert(id, (node_id, event_type));
         id
     }
 
-    pub fn add_scene_event_listener<F>(
+    pub fn process_scene_callback_actions(&mut self, context: &mut EventContext) {
+        for (event_type, callback) in context.take_event_listeners() {
+            self.scene_on_event(event_type, callback);
+        }
+        for target in context.take_destroyed_event_listeners() {
+            self.off_event(target);
+        }
+    }
+
+    pub fn scene_on_event(
         &mut self,
         event_type: EventType,
-        callback: F,
-    ) -> EventCallbackID
-    where
-        F: FnMut(&mut EventContext) + 'static,
-    {
+        callback: EventCallback,
+    ) -> EventCallbackID {
         let id = EventCallbackID::next();
         self.scene_event_listeners
             .entry(event_type)
             .or_default()
-            .insert(
-                id,
-                EventCallback {
-                    callback: Box::new(callback),
-                },
-            );
+            .insert(id, callback);
         id
     }
 
-    pub fn remove_event_listener(&mut self, target: EventCallbackID) {
+    pub fn off_event(&mut self, target: EventCallbackID) {
         // nodes
         if let Some((node_id, event_type)) = self.node_listeners_lookup.get(&target) {
             self.node_event_listeners
@@ -208,16 +205,16 @@ impl EventManager {
 
         if !self.close_request_dispatched && self.close_request.is_some() {
             self.close_request_dispatched = true;
-            events.push(Event::AppCloseRequest);
+            events.push(Event::System(SystemEvent::Close(CloseRequestEvent {})));
         } else if self.cancel_close_requested {
             self.close_request_dispatched = false;
             self.cancel_close_requested = false;
             self.close_request = None;
-            events.push(Event::CancelAppCloseRequest);
+            events.push(Event::System(SystemEvent::CancelClose(CancelClose {})));
         }
         if self.quitting && !self.quit_request_dispatched {
             self.quit_request_dispatched = true;
-            events.push(Event::Quit);
+            events.push(Event::System(SystemEvent::Quit(Quit {})));
         }
 
         events
@@ -231,7 +228,7 @@ impl EventManager {
             let mut node = context
                 .get_node(id)
                 .expect("Invariant violated: node tree contains an invalid ID.");
-            let Size { width, height } = node.get_bounding_box_size();
+            let Size { width, height } = node.get_bounding_box();
             let Position {
                 x: node_x,
                 y: node_y,
@@ -242,7 +239,7 @@ impl EventManager {
                 && x <= (node_x + width as i32)
                 && y <= (node_y + height as i32);
 
-            let node_layer = node.get_visual().get_layer().unwrap_or(0);
+            let node_layer = node.get_node_visual().get_layer().unwrap_or(0);
             if max_layer < node_layer {
                 max_layer = node_layer;
             }
@@ -295,18 +292,18 @@ impl EventManager {
                 Event::Mouse(event) => {
                     self.dispatch_mouse_event(event_type, context, event);
                 }
-                Event::Window { .. } => {
+                Event::Window(_event) => {
                     self.dispatch_window_event(event_type, context);
                 }
                 Event::Lifecycle(event) => {
                     self.dispatch_lifecycle_event(event_type, context, event)
                 }
-                Event::AppCloseRequest | Event::Quit => {
+                Event::System(event) => {
                     self.dispatch_all_nodes(event_type, context);
-                }
-                Event::CancelAppCloseRequest => {
-                    self.close_request = None;
-                    self.dispatch_all_nodes(event_type, context);
+                    match event {
+                        SystemEvent::CancelClose(_cancel_close) => self.close_request = None,
+                        _ => {}
+                    }
                 }
             }
         }

@@ -1,6 +1,6 @@
 use std::ops::AddAssign;
 
-use sdl3::pixels::Color as SdlColor;
+use sdl3::sys::pixels::SDL_Color;
 
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct Color {
@@ -12,6 +12,7 @@ pub struct Color {
 impl Color {
     pub const RED: Self = Self::rgb(255, 0, 0);
     pub const GREEN: Self = Self::rgb(0, 255, 0);
+    pub const LIME: Self = Self::rgb(140, 200, 0);
     pub const BLUE: Self = Self::rgb(0, 0, 255);
     pub const WHITE: Self = Self::rgb(255, 255, 255);
     pub const BLACK: Self = Self::rgb(0, 0, 0);
@@ -27,8 +28,13 @@ impl Color {
         Self { r, g, b, a }
     }
 
-    pub(crate) const fn into_sdl_color(self) -> SdlColor {
-        SdlColor::RGBA(self.r, self.g, self.b, self.a)
+    pub(crate) const fn into_sdl_color(self) -> SDL_Color {
+        SDL_Color {
+            r: self.r,
+            g: self.g,
+            b: self.b,
+            a: self.a,
+        }
     }
 }
 

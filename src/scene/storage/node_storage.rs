@@ -2,10 +2,7 @@ use std::collections::HashMap;
 
 use crate::{
     error::PrismaError,
-    node::{
-        ActionOrigin,
-        component::{NodeQueue, NodeText, NodeVisual},
-    },
+    node::component::{NodeQueue, NodeVisual},
     scene::{
         NodeID,
         node::{
@@ -14,7 +11,7 @@ use crate::{
         },
         storage::{
             StorageHandler,
-            handler::{QueueHandler, StateHandler, TextHandler, TreeHandler, VisualStateHandler},
+            handler::{QueueHandler, StateHandler, TreeHandler, VisualStateHandler},
         },
     },
 };
@@ -24,7 +21,6 @@ pub struct NodeStorage {
     visual_state: HashMap<NodeID, NodeVisual>,
     state: HashMap<NodeID, NodeState>,
     queue: HashMap<NodeID, NodeQueue>,
-    text: HashMap<NodeID, NodeText>,
 }
 impl NodeStorage {
     pub(crate) fn new() -> Self {
@@ -33,15 +29,13 @@ impl NodeStorage {
             state: HashMap::new(),
             visual_state: HashMap::new(),
             queue: HashMap::new(),
-            text: HashMap::new(),
         }
     }
 
-    pub fn new_node(&mut self, origin: ActionOrigin) -> NodeView<'_> {
+    pub fn new_node(&mut self) -> NodeView<'_> {
         let id = NodeID::next();
         self.storage().insert_context(id);
-        self.get_node_view(id, origin)
-            .expect("Node creation failed!")
+        self.get_node_view(id).expect("Node creation failed!")
     }
 
     pub fn exists(&mut self, id: NodeID) -> bool {
@@ -53,7 +47,6 @@ impl NodeStorage {
             tree: TreeHandler::new(&mut self.tree),
             state: StateHandler::new(&mut self.state),
             queue: QueueHandler::new(&mut self.queue),
-            text: TextHandler::new(&mut self.text),
             visual: VisualStateHandler::new(&mut self.visual_state),
         }
     }
@@ -62,12 +55,8 @@ impl NodeStorage {
         StateHandler::new(&mut self.state)
     }
 
-    pub fn get_node_view(
-        &mut self,
-        id: NodeID,
-        origin: ActionOrigin,
-    ) -> Result<NodeView<'_>, PrismaError> {
-        NodeView::new(id, self, origin)
+    pub fn get_node_view(&mut self, id: NodeID) -> Result<NodeView<'_>, PrismaError> {
+        NodeView::new(id, self)
     }
 
     pub fn get_nodes_id(&self) -> Vec<NodeID> {

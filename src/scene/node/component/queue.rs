@@ -1,6 +1,6 @@
 use std::collections::{HashMap, VecDeque};
 
-use crate::node::{Action, ActionOrigin, ActionType, node_action::ActionFamily};
+use crate::node::{Action, ActionFamily, ActionType};
 
 pub struct NodeQueue {
     queue: HashMap<ActionType, VecDeque<Action>>,
@@ -29,24 +29,24 @@ impl NodeQueue {
     }
 
     #[expect(unused)]
-    pub(crate) fn push_front<T>(&mut self, action: T, origin: ActionOrigin)
+    pub(crate) fn push_front<T>(&mut self, action: T)
     where
         T: ActionFamily,
     {
         self.queue
             .entry(T::TYPE)
             .or_default()
-            .push_front(T::into_action(action, origin));
+            .push_front(T::into_action(action));
     }
 
-    pub(crate) fn push_back<T>(&mut self, action: T, origin: ActionOrigin)
+    pub(crate) fn push_back<T>(&mut self, action: T)
     where
         T: ActionFamily,
     {
         self.queue
             .entry(T::TYPE)
             .or_default()
-            .push_back(T::into_action(action, origin));
+            .push_back(T::into_action(action));
     }
 
     pub(crate) fn pop_front<T>(&mut self) -> Option<T>

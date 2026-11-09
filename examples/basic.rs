@@ -6,6 +6,7 @@ use prismae::event::WindowCloseRequest;
 use prismae::util::Color;
 
 fn main() -> Result<(), PrismaError> {
+    let mut prisma = Prisma::init()?;
     let mut scene = Scene::new();
 
     scene
@@ -19,14 +20,13 @@ fn main() -> Result<(), PrismaError> {
         context.close(0);
     });
 
-    let mut app = Prisma::init()?;
-    app.add_window(
+    prisma.add_window(
         WindowBuilder::new("Example")
             .position_centered()
             .resizable()
             .size(800, 400),
         scene,
     )?;
-    app.run()?;
+    prisma.run()?;
     Ok(())
 }

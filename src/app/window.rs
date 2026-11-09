@@ -1,13 +1,13 @@
 use sdl3::{VideoSubsystem, video::WindowFlags};
 
-use crate::{Scene, error::PrismaError, render::Renderer, resources::ResourceManager};
+use crate::{Scene, error::PrismaError, render::Renderer, resources::manager::ResourceManager};
 
-pub struct AppWindow {
-    pub scene: Scene,
+pub struct PrismaWindow {
     pub id: u32,
+    scene: Scene,
     renderer: Renderer,
 }
-impl AppWindow {
+impl PrismaWindow {
     pub fn new(
         video_subsystem: VideoSubsystem,
         builder: WindowBuilder,
@@ -26,8 +26,8 @@ impl AppWindow {
 
         Ok(Self {
             id: window.id(),
-            renderer: Renderer::new(window.into_canvas()),
             scene,
+            renderer: Renderer::new(window.into_canvas()),
         })
     }
 
@@ -35,8 +35,24 @@ impl AppWindow {
         self.scene.is_quitting()
     }
 
-    pub fn draw(&mut self, resources: &mut ResourceManager) {
-        self.renderer.draw(&mut self.scene, resources);
+    pub fn render(&mut self, resources: &mut ResourceManager) {
+        self.renderer.render(&mut self.scene, resources);
+    }
+
+    pub fn create_lifecycle_events(&mut self) {
+        self.scene.create_lifecycle_events();
+    }
+
+    pub fn create_user_event(&mut self, event: sdl3::event::Event) {
+        self.scene.create_user_event(&event);
+    }
+
+    pub fn dispatch_events(&mut self) {
+        self.scene.dispatch_events();
+    }
+
+    pub fn process_scene(&mut self, resources: &mut ResourceManager) -> Result<(), PrismaError> {
+        self.scene.process_scene(resources, &self.renderer)
     }
 }
 pub struct WindowBuilder {

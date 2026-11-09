@@ -15,7 +15,7 @@ A simple UI framework for Rust built on SDL3.
 
 ```toml
 [dependencies]
-prismae = "0.3.0"
+prismae = "0.3.1"
 ```
 
 ## Example
@@ -31,21 +31,22 @@ fn main() -> Result<(), PrismaError> {
         .bg_color(Color::ORANGE)
         .size(150, 150)
         .border_radius(25)
-        .position(100, 100);
+        .position(100, 100)
+        .content("Hello World");
 
     scene.on_event::<WindowCloseRequest>(|context, _| {
         context.close(0);
     });
 
-    let mut app = Prisma::init()?;
-    app.add_window(
+    let mut prisma = Prisma::init()?;
+    prisma.add_window(
         WindowBuilder::new("Example")
             .position_centered()
             .resizable()
             .size(800, 400),
         scene,
     )?;
-    app.run()?;
+    prisma.run()?;
     Ok(())
 }
 ```

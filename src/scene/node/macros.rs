@@ -31,22 +31,14 @@ macro_rules! define_node_actions {
             const TYPE: ActionType;
 
             fn cast(action: Action) -> Option<Self> where Self: Sized;
-            fn into_action(self, origin: ActionOrigin) -> Action where Self: Sized;
+            fn into_action(self) -> Action where Self: Sized;
 
-        }
-
-        #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
-        pub enum ActionOrigin {
-            Code,
-            Event,
-            Visual,
         }
 
         pub enum Action {
             $(
                 $family {
-                    action: $family_enum,
-                    origin: ActionOrigin,
+                    action: $family_enum
                 },
             )*
         }
@@ -118,10 +110,9 @@ macro_rules! define_action_family {
                 }
             }
 
-            fn into_action(self, origin: ActionOrigin) -> Action {
+            fn into_action(self) -> Action {
                 Action::$family {
                     action: self,
-                    origin
                 }
             }
         }

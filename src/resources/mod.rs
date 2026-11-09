@@ -1,6 +1,10 @@
 pub mod font;
-mod macros;
-pub mod resource;
-mod resource_manager;
+pub mod manager;
 
-pub use resource_manager::ResourceManager;
+mod macros;
+mod registry;
+mod resource;
+
+pub use resource::*;
+
+pub(crate) use registry::ResourceEntry;

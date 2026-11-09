@@ -1,4 +1,10 @@
-use crate::{event::macros::*, node::NodeID, util::Position};
+use crate::{
+    event::{EventContext, macros::*},
+    node::NodeID,
+    util::Position,
+};
+use std::fmt::Display;
+use std::sync::atomic::{AtomicU32, Ordering};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum MouseButton {
@@ -10,7 +16,12 @@ pub enum MouseButton {
     Unknown,
 }
 
-define_events! {
+define_event! {
+    System as SystemEvent, SystemEventType {
+        Quit as Quit {}
+        Close as CloseRequest {}
+        CancelClose as CancelClose {}
+    }
     Window as WindowEvent, WindowEventType
     {
         WindowCloseRequest as WindowCloseRequest {

@@ -1,6 +1,6 @@
 [package]
 name = "prismae"
-version = "0.3.0"
+version = "0.3.1"
 edition = "2024"
 license = "MIT"
 repository = "https://github.com/Drieh/Prisma"
@@ -24,3 +24,7 @@ path = "examples/basic.rs"
 [[example]]
 name = "drag"
 path = "examples/drag.rs"
+
+[[example]]
+name = "hello_world"
+path = "examples/hello_world.rs"

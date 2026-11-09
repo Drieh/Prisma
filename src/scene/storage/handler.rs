@@ -1,5 +1,5 @@
 use crate::error::PrismaError;
-use crate::node::component::{NodeQueue, NodeState, NodeText, NodeVisual};
+use crate::node::component::{NodeQueue, NodeState, NodeVisual};
 use crate::scene::node::{NodeID, component::NodeTree};
 use crate::scene::storage::macros::define_handlers;
 use std::collections::HashMap;
@@ -9,33 +9,28 @@ define_handlers!(
     {StateHandler, NodeState}
     {VisualStateHandler, NodeVisual}
     {QueueHandler, NodeQueue}
-    {TextHandler, NodeText}
 );
 
 pub struct StorageHandler<'a> {
     pub tree: TreeHandler<'a>,
     pub state: StateHandler<'a>,
     pub queue: QueueHandler<'a>,
-    pub text: TextHandler<'a>,
     pub visual: VisualStateHandler<'a>,
 }
 impl<'a> StorageHandler<'a> {
+    /// Returns `true` if the node exists.
     pub fn has_node(&self, id: NodeID) -> bool {
         let Self {
             tree,
             state,
             visual: visual_state,
             queue,
-            text,
         } = self;
-        tree.contains(id)
-            || state.contains(id)
-            || visual_state.contains(id)
-            || queue.contains(id)
-            || text.contains(id)
+        tree.contains(id) && state.contains(id) && visual_state.contains(id) && queue.contains(id)
     }
 
-    pub(crate) fn get_nodes(&self) -> Vec<NodeID> {
+    /// Returns a list of all existing nodes.
+    pub fn get_nodes(&self) -> Vec<NodeID> {
         self.tree.get_nodes()
     }
 
@@ -45,13 +40,11 @@ impl<'a> StorageHandler<'a> {
             state,
             visual: visual_state,
             queue,
-            text,
         } = self;
         queue.insert(id);
         state.insert(id);
         visual_state.insert(id);
         tree.insert(id);
-        text.insert(id);
     }
 
     pub(crate) fn remove_context(&mut self, id: NodeID) {
@@ -60,12 +53,10 @@ impl<'a> StorageHandler<'a> {
             state,
             visual: visual_state,
             queue,
-            text,
         } = self;
         queue.remove(id);
         state.remove(id);
         visual_state.remove(id);
         tree.remove(id);
-        text.remove(id);
     }
 }

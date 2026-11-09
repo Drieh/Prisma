@@ -1,8 +1,9 @@
 mod app;
-pub mod event;
 mod render;
-mod resources;
 mod scene;
+
+pub mod event;
+pub mod resources;
 pub mod util;
 
 pub use app::Prisma;

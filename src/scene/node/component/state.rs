@@ -44,19 +44,23 @@ impl<'a> TypeMap {
 }
 
 pub struct NodeState {
-    pub destruction_requested: bool,
-    pub(crate) on_hover: Option<Box<StyleCallback>>,
-    pub(crate) on_active: Option<Box<StyleCallback>>,
+    pub(crate) destruction_requested: bool,
+    pub(crate) style_on_active: Option<StyleCallback>,
+    pub(crate) style_on_hover: Option<StyleCallback>,
+    pub(crate) user_type_map: TypeMap,
 
-    user_type_map: TypeMap,
+    pub is_hovered: bool,
+    pub is_active: bool,
 }
 impl NodeState {
     pub fn new() -> Self {
         Self {
-            user_type_map: TypeMap::new(),
-            on_active: None,
-            on_hover: None,
             destruction_requested: false,
+            user_type_map: TypeMap::new(),
+            style_on_active: None,
+            style_on_hover: None,
+            is_active: false,
+            is_hovered: false,
         }
     }
     pub fn set<T: Any>(&mut self, value: T) {

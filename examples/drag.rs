@@ -8,6 +8,9 @@ struct DragOffset {
     x: i32,
     y: i32,
 }
+
+// AREGLAR TRABA DEL HOVER
+
 fn main() -> Result<(), PrismaError> {
     let scene = drag_example_scene();
 
@@ -37,10 +40,17 @@ fn drag_example_scene() -> Scene {
         .size(150, 150);
 
     node.on_hover(|style| {
-        style.bg_color(Color::rgb(100, 100, 200));
+        style
+            .bg_color(Color::rgb(100, 100, 200))
+            .wait(500)
+            .bg_color(Color::BLUE);
     })
     .on_active(|style| {
-        style.bg_color(Color::RED).scale(0.67, 0.67);
+        style
+            .bg_color(Color::RED)
+            .scale(0.67, 0.67)
+            .wait(500)
+            .border_radius(0);
     })
     .on_event::<MouseDown>(|ctx, _| {
         if let Some(mut target) = ctx.current_target() {
