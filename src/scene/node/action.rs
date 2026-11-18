@@ -2,76 +2,62 @@ use crate::{
     event::{EventCallback, EventCallbackID, EventType},
     node::{
         NodeID,
+        component::StyleVisualState,
         macros::{define_action_family, define_node_actions},
     },
-    resources::{
-        FontID, TextureID,
-        font::{FontStyle, TextAlign},
+    util::{
+        Background, Border, DisplayLayout, DisplayPosition, Margin, Padding, Size, Text, Transform,
     },
-    util::{Color, Position},
 };
+
+type BackgroundCallback = dyn FnMut(&mut Background) + 'static;
+type TransformCallback = dyn FnMut(&mut Transform) + 'static;
+type TextCallback = dyn FnMut(&mut Text) + 'static;
+type PaddingCallback = dyn FnMut(&mut Padding) + 'static;
+type BorderCallback = dyn FnMut(&mut Border) + 'static;
+type MarginCallback = dyn FnMut(&mut Margin) + 'static;
 
 define_node_actions!(
     Style as StyleAction {
-        BGColor {
-            origin: StyleActionOrigin,
-            color: Color => Color::rgba(255, 255, 255, 255),
+        Background {
+            origin: StyleVisualState,
+            callback: Box<BackgroundCallback>,
         }
-        Layer {
-            origin: StyleActionOrigin,
-            layer: usize => 0,
+        Transform {
+            origin: StyleVisualState,
+            callback: Box<TransformCallback>,
         }
-        BorderRadius {
-            origin: StyleActionOrigin,
-            radius: u32 => 0,
+        Text {
+            origin: StyleVisualState,
+            callback: Box<TextCallback>,
         }
-        Scale {
-            origin: StyleActionOrigin,
-            x: f32 => 0.0,
-            y: f32 => 0.0,
+        Padding {
+            origin: StyleVisualState,
+            callback: Box<PaddingCallback>,
         }
-        Position {
-            origin: StyleActionOrigin,
-            position: Option<Position> => None,
-            absolute: Option<bool> => None,
+        Border {
+            origin: StyleVisualState,
+            callback: Box<BorderCallback>,
         }
-        Size {
-            origin: StyleActionOrigin,
-            width: u32 => 0,
-            height: u32 => 0,
-        }
-        TextContent {
-            origin: StyleActionOrigin,
-            content: String,
-        }
-        TextColor {
-            origin: StyleActionOrigin,
-            color: Color,
-        }
-        TextAlign {
-            origin: StyleActionOrigin,
-            align: TextAlign,
-        }
-        Font {
-            origin: StyleActionOrigin,
-            font: FontID,
-        }
-        FontSize {
-            origin: StyleActionOrigin,
-            size: u16,
-        }
-        FontStyle {
-            origin: StyleActionOrigin,
-            style: FontStyle,
-        }
-        BGImage {
-            origin: StyleActionOrigin,
-            image: TextureID,
+        Margin {
+            origin: StyleVisualState,
+            callback: Box<MarginCallback>,
         }
         Wait {
             ms: u64 => 0,
         }
-
+        Position {
+            origin: StyleVisualState,
+            position: DisplayPosition,
+        }
+        Display {
+            origin: StyleVisualState,
+            display: DisplayLayout,
+        }
+        Size {
+            origin: StyleVisualState,
+            size: Size,
+        }
     },
     EventListener as EventListenerAction {
         Add {
@@ -93,14 +79,4 @@ define_node_actions!(
             parent: Option<NodeID>,
         }
     },
-    Text as TextAction {
-
-    },
 );
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum StyleActionOrigin {
-    Code,
-    Hover,
-    Active,
-}

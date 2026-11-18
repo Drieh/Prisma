@@ -6,7 +6,7 @@ use std::{
 use crate::{
     Scene,
     error::PrismaError,
-    node::{NodeID, component::NodeTexture},
+    node::{NodeID, component::StyleTextureType},
     resources::{
         PrismaTexture, Resource, ResourceEntry, ResourceID, TextureID, registry::ResourceRegistry,
     },
@@ -53,19 +53,11 @@ impl TextureManager {
         Ok(id)
     }
 
-    pub fn get(&mut self, id: TextureID) -> Result<&mut PrismaTexture, PrismaError> {
+    pub fn get(&mut self, id: TextureID) -> Result<&PrismaTexture, PrismaError> {
         self.storage
-            .get_mut(&id)
-            .ok_or(PrismaError::ResourceNotFound(format!(
-                "Texture Manager: texture with id {id:?} not found"
-            )))
-    }
-
-    pub fn take(&mut self, id: TextureID) -> Result<PrismaTexture, PrismaError> {
-        self.storage
-            .remove(&id)
-            .ok_or(PrismaError::ResourceNotFound(format!(
-                "Texture Manager: texture with id {id:?} not found"
+            .get(&id)
+            .ok_or(PrismaError::resource_not_found(format!(
+                "Texture Manager: {id:?} not found"
             )))
     }
 
@@ -78,7 +70,7 @@ impl TextureManager {
         self.storage
             .remove(&id)
             .ok_or(PrismaError::ResourceNotFound(format!(
-                "Texture Manager: texture with id {id:?} not found"
+                "Texture Manager: {id:?} not found"
             )))
     }
 }

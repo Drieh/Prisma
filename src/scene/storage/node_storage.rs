@@ -6,7 +6,7 @@ use crate::{
     scene::{
         NodeID,
         node::{
-            NodeView,
+            Node,
             component::{NodeState, NodeTree},
         },
         storage::{
@@ -32,14 +32,14 @@ impl NodeStorage {
         }
     }
 
-    pub fn new_node(&mut self) -> NodeView<'_> {
+    pub fn new_node(&mut self) -> Node<'_> {
         let id = NodeID::next();
         self.storage().insert_context(id);
         self.get_node_view(id).expect("Node creation failed!")
     }
 
     pub fn exists(&mut self, id: NodeID) -> bool {
-        self.storage().has_node(id)
+        self.storage().contains(id)
     }
 
     pub fn storage(&mut self) -> StorageHandler<'_> {
@@ -55,8 +55,8 @@ impl NodeStorage {
         StateHandler::new(&mut self.state)
     }
 
-    pub fn get_node_view(&mut self, id: NodeID) -> Result<NodeView<'_>, PrismaError> {
-        NodeView::new(id, self)
+    pub fn get_node_view(&mut self, id: NodeID) -> Result<Node<'_>, PrismaError> {
+        Node::new(id, self)
     }
 
     pub fn get_nodes_id(&self) -> Vec<NodeID> {

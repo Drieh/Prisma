@@ -48,7 +48,7 @@ impl ResourceManager {
         Ok(resource_id)
     }
 
-    pub fn register_user<T>(&mut self, resource: T, id: NodeID) -> Result<(), PrismaError>
+    pub fn add_user<T>(&mut self, resource: T, id: NodeID) -> Result<(), PrismaError>
     where
         T: ResourceID,
     {
@@ -82,8 +82,13 @@ impl ResourceManager {
         }
     }
 
-    pub fn remove<T: ResourceID>(&mut self, id: T) -> Result<T::Resource, PrismaError> {
-        T::Resource::remove(id, self)
+    pub fn destroy<T>(&mut self, id: T) -> Result<(), PrismaError>
+    where
+        T: ResourceID,
+        Self: ResourceGetter<T::Resource>,
+    {
+        <Self as ResourceGetter<T::Resource>>::destroy(self, id)?;
+        Ok(())
     }
 
     pub fn clear(&mut self) {
@@ -95,40 +100,24 @@ impl ResourceManager {
         &mut self,
         id: T,
         options: <T::Resource as Resource>::GetOptions,
-    ) -> Result<&mut T::Resource, PrismaError>
+    ) -> Result<&T::Resource, PrismaError>
     where
         T: ResourceID,
         Self: ResourceGetter<T::Resource>,
     {
-        <Self as ResourceGetter<T::Resource>>::get_resource(self, id, options)
-    }
-
-    pub fn take_resource<T>(
-        &mut self,
-        id: T,
-        options: <T::Resource as Resource>::GetOptions,
-    ) -> Result<T::Resource, PrismaError>
-    where
-        T: ResourceID,
-        Self: ResourceGetter<T::Resource>,
-    {
-        <Self as ResourceGetter<T::Resource>>::take_resource(self, id, options)
+        <Self as ResourceGetter<T::Resource>>::get(self, id, options)
     }
 }
 
 // FONT
 
 impl ResourceGetter<Font> for ResourceManager {
-    fn get_resource(&mut self, id: FontID, options: FontOptions) -> Result<&mut Font, PrismaError> {
+    fn get(&mut self, id: FontID, options: FontOptions) -> Result<&Font, PrismaError> {
         self.font_manager.get(id, options.size)
     }
-
-    fn take_resource(
-        &mut self,
-        id: <Font as Resource>::ResourceID,
-        _options: <Font as Resource>::GetOptions,
-    ) -> Result<Font, PrismaError> {
-        self.font_manager.take(id)
+    fn destroy(&mut self, id: FontID) -> Result<(), PrismaError> {
+        self.font_manager.destroy(id)?;
+        Ok(())
     }
 }
 
@@ -141,20 +130,17 @@ impl ResourceRegister<Font> for ResourceManager {
 // TEXTURE
 
 impl ResourceGetter<PrismaTexture> for ResourceManager {
-    fn get_resource(
+    fn get(
         &mut self,
         id: TextureID,
         _options: TextureOptions,
-    ) -> Result<&mut PrismaTexture, PrismaError> {
+    ) -> Result<&PrismaTexture, PrismaError> {
         self.texture_manager.get(id)
     }
 
-    fn take_resource(
-        &mut self,
-        id: <PrismaTexture as Resource>::ResourceID,
-        _options: <PrismaTexture as Resource>::GetOptions,
-    ) -> Result<PrismaTexture, PrismaError> {
-        self.texture_manager.take(id)
+    fn destroy(&mut self, id: <PrismaTexture as Resource>::ResourceID) -> Result<(), PrismaError> {
+        self.texture_manager.remove(id)?;
+        Ok(())
     }
 }
 

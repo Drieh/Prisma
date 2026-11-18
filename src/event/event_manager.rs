@@ -3,18 +3,19 @@ use crate::event::CancelClose;
 use crate::event::CloseRequest as CloseRequestEvent;
 use crate::event::EventCallback;
 use crate::event::EventCallbackID;
+use crate::event::EventContext;
 use crate::event::LifecycleEvent;
 use crate::event::LifecycleEventType;
 use crate::event::MouseEnter;
 use crate::event::MouseEvent;
 use crate::event::MouseLeave;
+use crate::event::PropagationState;
 use crate::event::Quit;
 use crate::event::SystemEvent;
-use crate::event::context::EventContext;
-use crate::event::context::PropagationState;
 use crate::event::manager::LifecycleManager;
 use crate::event::manager::MouseManager;
 use crate::event::manager::WindowManager;
+use crate::scene::storage::StorageHandler;
 use crate::util::Size;
 use std::collections::{HashMap, HashSet};
 
@@ -228,18 +229,18 @@ impl EventManager {
             let mut node = context
                 .get_node(id)
                 .expect("Invariant violated: node tree contains an invalid ID.");
-            let Size { width, height } = node.get_bounding_box();
+            let Size { width, height } = node.get_padding_box();
             let Position {
                 x: node_x,
                 y: node_y,
-            } = node.get_absolute_position();
+            } = node.get_scene_position();
 
             let inside = x >= node_x
                 && y >= node_y
                 && x <= (node_x + width as i32)
                 && y <= (node_y + height as i32);
 
-            let node_layer = node.get_node_visual().get_layer().unwrap_or(0);
+            let node_layer = node.get_visual().get_transform().get_layer();
             if max_layer < node_layer {
                 max_layer = node_layer;
             }
@@ -249,25 +250,17 @@ impl EventManager {
             }
         }
         result.sort_by(|node_id_1, node_id_2| {
-            let node_layer_1 = context
-                .storage()
-                .visual
-                .get_unchecked(*node_id_1)
-                .get_layer()
-                .unwrap_or(0);
-            let node_layer_2 = context
-                .storage()
-                .visual
-                .get_unchecked(*node_id_2)
-                .get_layer()
-                .unwrap_or(0);
+            let StorageHandler { visual, .. } = context.storage();
 
-            if node_layer_1 > node_layer_2 {
-                std::cmp::Ordering::Greater
-            } else if node_layer_1 < node_layer_2 {
-                std::cmp::Ordering::Less
-            } else {
+            let node_layer_1 = visual.get_unchecked(*node_id_1).get_transform().get_layer();
+            let node_layer_2 = visual.get_unchecked(*node_id_2).get_transform().get_layer();
+
+            let ordering = node_layer_1.cmp(&node_layer_2);
+
+            if ordering == std::cmp::Ordering::Equal {
                 node_id_1.cmp(node_id_2)
+            } else {
+                ordering
             }
         });
 

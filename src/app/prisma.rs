@@ -38,10 +38,10 @@ impl Prisma {
     ///
     /// Returns [`PrismaError::InitError`] if there is any error in initialization.
     pub fn init() -> Result<Self, PrismaError> {
-        let sdl_context = sdl3::init().map_err(|e| PrismaError::InitError(e.to_string()))?;
+        let sdl_context = sdl3::init().map_err(|e| PrismaError::init_error(e.to_string()))?;
         unsafe {
             if !TTF_Init() {
-                return Err(PrismaError::InitError(sdl_get_error().to_string()));
+                return Err(PrismaError::init_error(sdl_get_error().to_string()));
             }
         }
 
@@ -58,7 +58,7 @@ impl Prisma {
         let video_subsystem = self
             .sdl_context
             .video()
-            .map_err(|e| PrismaError::InitError(e.to_string()))?;
+            .map_err(|e| PrismaError::init_error(e.to_string()))?;
         let window = PrismaWindow::new(video_subsystem, builder, scene)?;
         self.windows.insert(window.id, window);
         Ok(())
@@ -74,11 +74,7 @@ impl Prisma {
             path.to_path_buf()
         } else {
             std::env::current_dir()
-                .map_err(|_| {
-                    PrismaError::ResourceNotFound(
-                        "Prisma: cannot create a registry from a non existing resource".to_string(),
-                    )
-                })?
+                .map_err(|e| PrismaError::resource_not_found(e.to_string()))?
                 .join(path)
         };
         self.resources.register_external::<T>(&absolute_path)
@@ -93,12 +89,12 @@ impl Prisma {
         let mut event_pump = self
             .sdl_context
             .event_pump()
-            .map_err(|e| PrismaError::InitError(e.to_string()))?;
+            .map_err(|e| PrismaError::init_error(e.to_string()))?;
         let frame_time = Duration::from_millis(1000 / 60);
         self.running = true;
 
         for window in self.windows.values_mut() {
-            window.process_scene(&mut self.resources);
+            window.process_scene(&mut self.resources)?;
         }
 
         while self.running {

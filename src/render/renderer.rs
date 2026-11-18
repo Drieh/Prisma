@@ -2,14 +2,16 @@ use std::{collections::BTreeMap, ffi::CString, ptr::null};
 
 use crate::{
     error::PrismaError,
-    node::component::{NodeTexture, NodeVisual},
+    node::component::{NodeVisual, StyleTextureType, StyleVisualState},
     render::math::{elipse_top_arc, line},
-    resources::{FontOptions, PrismaTexture, TextureOptions, manager::ResourceManager},
+    resources::{
+        FontID, FontOptions, PrismaTexture, ResourceID, TextureID, TextureOptions,
+        manager::ResourceManager,
+    },
     scene::{NodeID, Scene, storage::StorageHandler},
-    util::{Position, Scale, Size},
+    util::{Position, Size, Text},
 };
 use sdl3::{
-    pixels::Color as SdlColor,
     rect::Point,
     render::Canvas,
     sys::{
@@ -31,6 +33,14 @@ impl Renderer {
         Self { canvas }
     }
 
+    pub fn get_viewport_size(&self) -> Size {
+        let size = self.canvas.viewport().size();
+        Size {
+            width: size.0,
+            height: size.1,
+        }
+    }
+
     pub fn render(&mut self, scene: &mut Scene, resources: &mut ResourceManager) {
         let mut storage = scene.storage();
         let render_queue = self.build_render_queue(&mut storage);
@@ -39,14 +49,19 @@ impl Renderer {
         self.canvas.present();
     }
 
-    fn build_render_queue(&self, storage: &mut StorageHandler) -> BTreeMap<usize, Vec<NodeID>> {
+    fn build_render_queue(&self, storage: &StorageHandler) -> BTreeMap<usize, Vec<NodeID>> {
         let mut render_queue: BTreeMap<usize, Vec<NodeID>> = BTreeMap::new();
 
         for id in storage.get_nodes() {
             let tree = storage.tree.get_unchecked(id);
-            let visual = storage.visual.get_unchecked(id);
+
             if tree.get_parent().is_none() {
-                self.visit(id, storage, visual.get_layer(), &mut render_queue);
+                self.visit(
+                    id,
+                    storage,
+                    storage.visual.get_unchecked(id).get_transform().get_layer(),
+                    &mut render_queue,
+                );
             }
         }
         render_queue
@@ -55,21 +70,23 @@ impl Renderer {
     fn visit(
         &self,
         id: NodeID,
-        storage: &mut StorageHandler,
-        parent_layer: Option<usize>,
+        storage: &StorageHandler,
+        parent_layer: usize,
         render_queue: &mut BTreeMap<usize, Vec<NodeID>>,
     ) {
         let StorageHandler { tree, visual, .. } = storage;
-        let layer = visual
-            .get_unchecked(id)
-            .get_layer()
-            .or(parent_layer)
-            .unwrap_or(0);
+        let current_layer = visual.get_unchecked(id).get_transform().get_layer();
+
+        let layer = if current_layer == 0 {
+            parent_layer
+        } else {
+            current_layer
+        };
 
         render_queue.entry(layer).or_default().push(id);
 
         for child in tree.get_unchecked(id).get_children() {
-            self.visit(child, storage, Some(layer), render_queue);
+            self.visit(child, storage, layer, render_queue);
         }
     }
 
@@ -119,22 +136,14 @@ impl Renderer {
             .get_node(id)
             .expect("Internal invariant violated: render layer contains an invalid node ID");
 
-        let Position { x: pos_x, y: pos_y } = node.get_absolute_position();
-        let visual = node.get_node_visual().clone();
-
-        let color = visual.get_bg_color();
-
-        let Size { width, height } = visual.get_bounding_box();
+        let Position { x: pos_x, y: pos_y } = node.get_scene_position();
+        let node_visual = node.get_visual().clone();
+        let Size { width, height } = node.get_padding_box();
         let width = width as i32;
         let height = height as i32;
-
-        let border_radius = visual.get_border_radius();
-
-        let Scale {
-            x: scale_x,
-            y: scale_y,
-        } = visual.get_scale();
-
+        let scale_x = node_visual.get_transform().get_scale_x();
+        let scale_y = node_visual.get_transform().get_scale_y();
+        let border_radius = node_visual.get_border().get_radius();
         let radius_x = if border_radius as f32 * scale_x > width as f32 / 2.0 {
             width / 2
         } else {
@@ -147,12 +156,8 @@ impl Renderer {
             (border_radius as f32 * scale_y).round() as i32
         };
 
-        self.canvas.set_draw_color(SdlColor {
-            r: color.r,
-            g: color.g,
-            b: color.b,
-            a: color.a,
-        });
+        let bg_color = node_visual.get_background().get_color();
+        self.canvas.set_draw_color(bg_color.into_sdl_color());
 
         for x in (pos_x)..=(pos_x + width as i32) {
             let mut start = Point::new(x, 0);
@@ -198,7 +203,7 @@ impl Renderer {
                 .expect("Failed to draw line");
         }
 
-        let _text_result = self.render_node_text(scene, id, resources).unwrap();
+        self.render_node_text(scene, id, resources).unwrap();
     }
 
     fn render_node_text(
@@ -209,17 +214,21 @@ impl Renderer {
     ) -> Result<(), PrismaError> {
         let StorageHandler { mut visual, .. } = scene.storage();
         let node_visual = visual.get_unchecked_mut(id);
+        let node_text = node_visual.get_text();
 
-        if node_visual.get_content().is_empty() {
+        if node_text.get_content().is_empty() {
             return Ok(());
         }
 
-        if let Some(texture_id) = node_visual.get_texture(NodeTexture::Text) {
+        if let Some(cached_texture) = node_visual.get_texture_cache(StyleTextureType::Text)
+            && let texture_id = cached_texture.id()
+            && texture_id != TextureID::none()
+        {
             let texture = resources.get_resource(texture_id, TextureOptions {})?;
             let width = texture.width;
             let height = texture.height;
 
-            let node_position = scene.get_node(id)?.get_absolute_position();
+            let node_position = scene.get_node(id)?.get_scene_position();
 
             let rect = &SDL_FRect {
                 x: node_position.x as f32,
@@ -227,20 +236,18 @@ impl Renderer {
                 w: width as f32,
                 h: height as f32,
             };
-            let raw = resources.get_resource(texture_id, TextureOptions {})?.raw();
+            let raw = texture.raw();
 
             unsafe {
                 let result = SDL_RenderTexture(self.canvas.raw(), raw, null(), rect);
                 if !result {
-                    return Err(PrismaError::RenderError(
-                        "Failed to render text".to_string(),
-                    ));
+                    return Err(PrismaError::render_error("Failed to render text"));
                 }
             }
             Ok(())
         } else {
             Err(PrismaError::RenderError(format!(
-                "Cannot render a node's text without an active text texture"
+                "Cannot render a node's text without an active text texture. Try to register a font first."
             )))
         }
     }
@@ -250,22 +257,25 @@ impl Renderer {
         visual: &NodeVisual,
         resources: &mut ResourceManager,
     ) -> Result<PrismaTexture, PrismaError> {
-        if visual.get_font().is_none() {
-            return Err(PrismaError::RenderError(
-                "Text Renderer: cannot create a text texture without a font".to_string(),
+        let node_text = visual.get_text();
+        if node_text.get_font_family() == FontID::none() {
+            return Err(PrismaError::render_error(
+                "Text Renderer: cannot create a text texture without a font.",
             ));
         }
         unsafe {
             let font: *mut TTF_Font = resources
                 .get_resource(
-                    visual.get_font().unwrap(),
+                    node_text.get_font_family(),
                     FontOptions {
-                        size: visual.get_font_size(),
+                        size: node_text.get_font_size(),
                     },
                 )?
                 .raw();
 
-            let text = CString::new(visual.get_content()).unwrap();
+            let text = CString::new(node_text.get_content()).map_err(|e| {
+                PrismaError::render_error(format!("Failed to create text texture: {e}"))
+            })?;
             let mut w: i32 = 0;
             let mut h: i32 = 0;
             TTF_GetStringSize(font, text.as_ptr(), text.count_bytes(), &mut w, &mut h);
@@ -274,11 +284,11 @@ impl Renderer {
                 font,
                 text.as_ptr(),
                 text.as_bytes().len(),
-                visual.get_text_color().into_sdl_color(),
+                node_text.get_color().into_sdl_color(),
             );
             if surface.is_null() {
-                return Err(PrismaError::RenderError(
-                    "Failed to create a SDL Surface from node's visual component".to_string(),
+                return Err(PrismaError::render_error(
+                    "Failed to create a SDL Surface from node's visual component",
                 ));
             }
 
@@ -287,8 +297,8 @@ impl Renderer {
             SDL_DestroySurface(surface);
 
             if texture.is_null() {
-                return Err(PrismaError::RenderError(
-                    "Failed to create a SDL Texture from SDL_Surface".to_string(),
+                return Err(PrismaError::render_error(
+                    "Failed to create a SDL Texture from SDL_Surface",
                 ));
             }
 

@@ -66,13 +66,6 @@ macro_rules! define_resource {
                 const TYPE: ResourceType = ResourceType::$resource;
                 type ResourceID = $resource_id;
                 type GetOptions = $resource_options;
-
-                fn remove(
-                    id: Self::ResourceID,
-                    manager: &mut ResourceManager,
-                    ) -> Result<Self, PrismaError> {
-                        manager.$manager.remove(id)
-                    }
             }
 
             impl Drop for $resource {
@@ -95,7 +88,14 @@ macro_rules! define_resource {
                 type Resource = $resource;
 
                 fn id(id: u32) -> Self {
+                    if id == 0 {
+                        panic!("The value 0 represents a non-valid ID!")
+                    }
                     Self { id }
+                }
+
+                fn none() -> Self {
+                    Self { id: 0 }
                 }
 
                 fn raw(&self) -> u32 {

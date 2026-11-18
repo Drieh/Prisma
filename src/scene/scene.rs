@@ -1,5 +1,3 @@
-use std::time::Instant;
-
 use crate::error::PrismaError;
 use crate::event::EventCallback;
 use crate::event::EventCallbackID;
@@ -10,41 +8,46 @@ use crate::node::Action;
 use crate::node::EventListenerAction;
 use crate::node::NodeTreeAction;
 use crate::node::StyleAction;
-use crate::node::StyleActionOrigin;
-use crate::node::StyleView;
-use crate::node::component::NodeTexture;
+use crate::node::component::StyleTextureType;
 use crate::render::Renderer;
+use crate::resources::ResourceID;
+use crate::resources::TextureID;
 use crate::resources::manager::ResourceManager;
+use crate::scene::Node;
 use crate::scene::NodeID;
-use crate::scene::NodeView;
 use crate::scene::handler::CloseHandler;
 use crate::scene::handler::PendingNodesHandler;
-use crate::scene::handler::TextureHandler;
-use crate::scene::handler::TextureRequirement;
 use crate::scene::storage::{NodeStorage, StorageHandler};
+use crate::util::Background;
 use crate::util::Color;
+use crate::util::Size;
+use crate::util::Text;
+use std::time::Instant;
 
 /// Represents a UI scene displayed inside an window.
 ///
 /// A scene owns all nodes and processes events within its window.
 pub struct Scene {
     pub color: Color,
+
+    size: Size,
     nodes: NodeStorage,
     event_manager: EventManager,
-
     pending_nodes_handler: PendingNodesHandler,
     close_handler: CloseHandler,
-    texture_handler: TextureHandler,
 }
 impl Scene {
     pub fn new() -> Self {
         Self {
             color: Color::rgb(255, 255, 255),
+            size: Size {
+                width: 0,
+                height: 0,
+            },
             nodes: NodeStorage::new(),
             event_manager: EventManager::new(),
             pending_nodes_handler: PendingNodesHandler::new(),
             close_handler: CloseHandler::new(),
-            texture_handler: TextureHandler::new(),
         }
     }
 
@@ -55,7 +58,7 @@ impl Scene {
     /// Creates a new node and returns a mutable [`NodeView`] to it.
     ///
     /// The returned view can be used to configure the node before or after Prisma is running.
-    pub fn new_node(&mut self) -> NodeView<'_> {
+    pub fn new_node(&mut self) -> Node<'_> {
         let new_node = self.nodes.new_node();
         self.pending_nodes_handler.push_created(new_node.get_id());
         new_node
@@ -76,17 +79,8 @@ impl Scene {
     /// # Errors
     ///
     /// Returns [`PrismaError::NodeNotFound`] if there is no node for the given [`NodeID`].
-    pub fn get_node(&mut self, id: NodeID) -> Result<NodeView<'_>, PrismaError> {
+    pub fn get_node(&mut self, id: NodeID) -> Result<Node<'_>, PrismaError> {
         self.nodes.get_node_view(id)
-    }
-
-    /// Sets the background color of the scene.
-    pub fn bg_color(&mut self, color: Color) {
-        self.color = Color { a: 255, ..color };
-    }
-
-    pub fn get_bg_color(&self) -> Color {
-        self.color
     }
 
     /// Returns `true` if window is about to close.
@@ -94,29 +88,68 @@ impl Scene {
         self.close_handler.is_quitting()
     }
 
-    pub(crate) fn process_textures(
+    fn process_node_textures(
         &mut self,
+        id: NodeID,
         resources: &mut ResourceManager,
         renderer: &Renderer,
     ) -> Result<(), PrismaError> {
         let StorageHandler { mut visual, .. } = self.nodes.storage();
 
-        for TextureRequirement { node, req } in self.texture_handler.take_queue() {
-            let node_visual = visual.get_unchecked_mut(node);
-            if let Some(texture) = node_visual.get_texture(req) {
-                println!("removed user {node:?} from {texture:?}");
-                resources.remove_user(texture, node)?;
-            }
-            match req {
-                NodeTexture::Text => {
-                    let texture = renderer.create_text_texture(node_visual, resources)?;
-                    let texture_id = resources.register_internal(texture)?;
+        let node_visual = visual.get_unchecked_mut(id);
+        let state = node_visual.current_visual_state();
+        let req_list = [StyleTextureType::Background, StyleTextureType::Text];
 
-                    println!("added user {node:?} for {texture_id:?}");
-                    resources.register_user(texture_id, node)?;
-                    node_visual.set_texture(texture_id, req);
+        for req in req_list.clone() {
+            let texture_required = match req {
+                StyleTextureType::Background => {
+                    let background = node_visual.get_background();
+                    let cached_seed = node_visual
+                        .get_texture_cache(req)
+                        .and_then(|cached| Some(cached.seed::<Background>()))
+                        .unwrap_or(Background::empty());
+
+                    cached_seed != background
                 }
-                NodeTexture::Image => todo!(),
+                StyleTextureType::Text => {
+                    let text = node_visual.get_text();
+                    let cached_seed = node_visual
+                        .get_texture_cache(req)
+                        .and_then(|cached| Some(cached.seed::<Text>()))
+                        .unwrap_or(Text::empty());
+
+                    cached_seed != text
+                }
+            };
+
+            if texture_required {
+                println!("texture_required!");
+                if let Some(texture) = node_visual.get_texture_cache(req) {
+                    if texture.id() != TextureID::none() {
+                        println!("removed user {id:?} for {:?}", texture.id());
+                        resources.remove_user(texture.id(), id)?;
+                    }
+                }
+                match req {
+                    StyleTextureType::Text => {
+                        let texture = renderer.create_text_texture(node_visual, resources)?;
+                        let text_size = Size {
+                            width: texture.width,
+                            height: texture.height,
+                        };
+                        node_visual.set_inline_size(text_size, state);
+                        let texture_id = resources.register_internal(texture)?;
+
+                        println!("created text texture. {texture_id:?} {state:?}");
+                        resources.add_user(texture_id, id)?;
+                        node_visual.set_texture_cache(req, texture_id, state);
+                    }
+                    StyleTextureType::Background => {
+                        // provisional
+                        println!("created bg texture. {state:?}");
+                        node_visual.set_texture_cache(req, TextureID::none(), state);
+                    }
+                }
             }
         }
         Ok(())
@@ -180,23 +213,24 @@ impl Scene {
         resources: &mut ResourceManager,
         renderer: &Renderer,
     ) -> Result<(), PrismaError> {
+        self.size = renderer.get_viewport_size();
+
         for id in self.nodes.get_nodes_id() {
             self.process_node_tree_actions(id);
             self.process_event_listener_actions(id);
             self.process_node_style_actions(id);
             self.process_node_destruction_queue(id);
+            self.process_node_textures(id, resources, renderer)?;
         }
-        self.process_textures(resources, renderer)?;
 
+        let mut storage = self.nodes.storage();
         for id in self.pending_nodes_handler.take_destroyed() {
-            let StorageHandler { visual, .. } = self.nodes.storage();
-
-            let node_visual = visual.get_unchecked(id);
+            let node_visual = storage.visual.get_unchecked(id);
             for texture in node_visual.get_all_textures() {
                 resources.remove_user(texture, id)?;
             }
             self.event_manager.clear_node_listeners(id);
-            self.destroy_node(id).expect("Failded to destroy node");
+            storage.remove_context(id);
         }
         Ok(())
     }
@@ -232,40 +266,20 @@ impl Scene {
         let node_visual = visual.get_unchecked_mut(id);
         let node_queue = queue.get_unchecked_mut(id);
 
+        node_visual.viewport = self.size;
+
         let is_hovered = self.event_manager.is_node_hovered(id);
         let is_active = self.event_manager.is_node_active(id);
-        let was_hovered = node_state.is_hovered;
-        let was_active = node_state.is_active;
-
-        if is_hovered
-            && !was_hovered
-            && !is_active
-            && let Some(style_callback) = &mut node_state.style_on_hover
-        {
-            let mut style = StyleView::new(node_queue, StyleActionOrigin::Hover);
-            style_callback(&mut style);
-        }
-
-        if is_active
-            && !was_active
-            && let Some(style_callback) = &mut node_state.style_on_active
-        {
-            let mut style = StyleView::new(node_queue, StyleActionOrigin::Active);
-            style_callback(&mut style);
-        }
 
         if is_active {
             node_visual.clear_normal_timer();
             node_visual.clear_hover_timer();
-            node_visual.set_active();
         } else if is_hovered {
             node_visual.clear_normal_timer();
             node_visual.clear_active_timer();
-            node_visual.set_hover();
         } else {
             node_visual.clear_hover_timer();
             node_visual.clear_active_timer();
-            node_visual.set_normal();
         }
 
         if let Some(timer) = node_visual.get_current_timer()
@@ -274,75 +288,79 @@ impl Scene {
         {
             return;
         } else {
-            node_visual.clear_current_timer();
+            node_visual.clear_current_state_timer();
         }
 
         while let Some(style_action) = node_queue.pop_front::<StyleAction>() {
             match style_action {
-                StyleAction::BGColor { origin, color } => {
-                    node_visual.set_bg_color(color, origin);
-                }
-                StyleAction::BGImage { origin, image } => {
-                    node_visual.set_bg_image(image, origin);
-                }
-                StyleAction::Layer { origin, layer } => {
-                    node_visual.set_layer(layer, origin);
-                }
-                StyleAction::BorderRadius { origin, radius } => {
-                    node_visual.set_border_radius(radius, origin)
-                }
-                StyleAction::Scale { origin, x, y } => {
-                    node_visual.set_scale(x, y, origin);
-                }
-                StyleAction::Size {
+                StyleAction::Border {
                     origin,
-                    width,
-                    height,
+                    mut callback,
                 } => {
-                    node_visual.set_size(width, height, origin);
+                    let mut value = node_visual.get_border();
+                    callback(&mut value);
+                    node_visual.set_border(value, origin);
                 }
-                StyleAction::TextContent { origin, content } => {
-                    node_visual.set_content(content, origin);
+                StyleAction::Background {
+                    origin,
+                    mut callback,
+                } => {
+                    let mut value = node_visual.get_background();
+                    callback(&mut value);
+                    node_visual.set_background(value, origin);
                 }
-                StyleAction::TextColor { origin, color } => {
-                    node_visual.set_text_color(color, origin);
+                StyleAction::Transform {
+                    origin,
+                    mut callback,
+                } => {
+                    let mut value = node_visual.get_transform();
+                    callback(&mut value);
+                    node_visual.set_transform(value, origin);
                 }
-                StyleAction::TextAlign { origin, align } => {
-                    node_visual.set_text_align(align, origin);
+                StyleAction::Text {
+                    origin,
+                    mut callback,
+                } => {
+                    let mut value = node_visual.get_text();
+                    callback(&mut value);
+                    node_visual.set_text(value, origin);
                 }
-                StyleAction::Font { origin, font } => {
-                    node_visual.set_font(font, origin);
+                StyleAction::Padding {
+                    origin,
+                    mut callback,
+                } => {
+                    let mut value = node_visual.get_padding();
+                    callback(&mut value);
+                    node_visual.set_padding(value, origin);
                 }
-                StyleAction::FontSize { origin, size } => {
-                    node_visual.set_font_size(size, origin);
+                StyleAction::Margin {
+                    origin,
+                    mut callback,
+                } => {
+                    let mut value = node_visual.get_margin();
+                    callback(&mut value);
+                    node_visual.set_margin(value, origin);
                 }
-                StyleAction::FontStyle { origin, style } => {
-                    node_visual.set_font_style(style, origin);
-                }
+
                 StyleAction::Wait { ms } => {
-                    node_visual.set_timer(ms);
+                    node_visual.wait(ms);
                     break;
                 }
-                StyleAction::Position {
-                    origin,
-                    position,
-                    absolute,
-                } => {
-                    if let Some(value) = position {
-                        node_visual.set_position(value, origin);
-                    }
-                    if let Some(value) = absolute {
-                        if value {
-                            node_visual.set_position_absolute(origin);
-                        } else {
-                            node_visual.set_position_relative(origin);
-                        }
-                    }
+                StyleAction::Position { origin, position } => {
+                    node_visual.set_position(position, origin);
+                }
+                StyleAction::Display { origin, display } => {
+                    node_visual.set_display(display, origin);
+                }
+                StyleAction::Size { origin, size } => {
+                    node_visual.set_size(size, origin);
                 }
             }
-        }
-        if node_visual.texture_required(NodeTexture::Text) {
-            self.texture_handler.create_texture(id, NodeTexture::Text);
+
+            /*
+            self.texture_handler
+                .eval_texture(id, StyleTextureType::Background);
+             */
         }
 
         if is_active {
@@ -352,6 +370,7 @@ impl Scene {
         } else {
             node_visual.set_normal();
         }
+
         node_state.is_active = is_active;
         node_state.is_hovered = is_hovered;
     }

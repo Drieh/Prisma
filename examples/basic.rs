@@ -9,15 +9,24 @@ fn main() -> Result<(), PrismaError> {
     let mut prisma = Prisma::init()?;
     let mut scene = Scene::new();
 
-    scene
-        .new_node()
-        .bg_color(Color::ORANGE)
-        .size(150, 150)
-        .border_radius(25)
-        .position(100, 100);
+    scene.new_node().style(|style| {
+        style
+            .background(|bg| {
+                bg.color(Color::RED);
+            })
+            .border(|border| {
+                border.radius(24);
+            })
+            .padding(|p| {
+                p.top(12);
+            })
+            .text(|txt| {
+                txt.content("hola");
+            });
+    });
 
-    scene.on_event::<WindowCloseRequest>(|context, _| {
-        context.close(0);
+    scene.on_event::<WindowCloseRequest>(|ctx, _| {
+        ctx.close(0);
     });
 
     prisma.add_window(

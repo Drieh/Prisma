@@ -1,16 +1,15 @@
-use std::path::Path;
-use std::path::PathBuf;
-
 use prismae::Prisma;
 use prismae::Scene;
 use prismae::WindowBuilder;
 use prismae::error::PrismaError;
+use prismae::event::Click;
 use prismae::event::WindowCloseRequest;
 use prismae::resources::Font;
 use prismae::util::Color;
+use prismae::util::DisplayLayout;
 
 fn main() -> Result<(), PrismaError> {
-    let mut prisma: Prisma = Prisma::init()?;
+    let mut prisma = Prisma::init()?;
 
     let roboto_font = prisma.register::<Font>("examples/assets/font/Roboto.ttf")?;
 
@@ -18,21 +17,42 @@ fn main() -> Result<(), PrismaError> {
 
     scene
         .new_node()
-        .with_style(move |style| {
+        .style(move |style| {
             style
-                .bg_color(Color::LIME)
-                .size(200, 200)
-                .border_radius(25)
-                .position(200, 100)
-                .content("hola".to_string())
-                .font_family(roboto_font)
-                .font_size(24);
+                .background(|bg| {
+                    bg.color(Color::LIME);
+                })
+                .border(|br| {
+                    br.radius(24);
+                })
+                .text(move |txt| {
+                    txt.content("hola".into())
+                        .font_family(roboto_font)
+                        .font_size(12);
+                })
+                .display(DisplayLayout::InlineBlock);
         })
-        .on_hover(|style| {
-            style.font_size(48);
+        .hover(|style| {
+            style
+                .text(|txt| {
+                    txt.font_size(64);
+                })
+                .background(|bg| {
+                    bg.color(Color::RED);
+                });
+            println!("hover");
         })
-        .on_active(|style| {
-            style.font_size(96);
+        .active(|style| {
+            style.text(|txt| {
+                txt.font_size(96);
+            });
+        })
+        .on_event::<Click>(|ctx, _| {
+            ctx.current_target().style(|style| {
+                style.background(|bg| {
+                    bg.color(Color::GREEN);
+                });
+            });
         });
 
     scene.on_event::<WindowCloseRequest>(|context, _| {

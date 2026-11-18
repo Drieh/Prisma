@@ -1,147 +1,221 @@
 use std::{
-    collections::{HashMap, HashSet},
-    ops::Add,
+    collections::HashMap,
     time::{Duration, Instant},
 };
 
 use crate::{
-    node::StyleActionOrigin,
-    resources::{
-        FontID, TextureID,
-        font::{FontStyle, TextAlign},
+    resources::{ResourceID, TextureID},
+    util::{
+        Background, Border, DisplayLayout, DisplayPosition, Margin, Padding, Size, StyleCategory,
+        StyleTextureCategory, Text, Transform,
     },
-    util::{Color, Position, Scale, Size},
 };
 
-#[derive(Clone, Copy)]
-struct Transform {
-    pub position: Position,
-    pub position_absolute: bool,
-    pub rotation: f32,
-    pub scale: Scale,
-    pub layer: Option<usize>,
+#[derive(Clone, Copy, Hash, PartialEq, Eq, Debug)]
+pub enum StyleTextureType {
+    Background,
+    Text,
 }
 
-impl Transform {
-    pub fn new() -> Self {
+#[derive(Clone, PartialEq, Debug)]
+pub enum StyleTextureSeed {
+    Text(Text),
+    Background(Background),
+}
+
+#[derive(Clone, PartialEq, Debug)]
+pub struct CachedTexture {
+    seed: StyleTextureSeed,
+    texture_id: TextureID,
+}
+
+impl CachedTexture {
+    pub fn seed<T: StyleTextureCategory>(&self) -> T {
+        T::from_seed(&self.seed)
+    }
+
+    pub fn id(&self) -> TextureID {
+        self.texture_id
+    }
+}
+
+#[derive(Clone, PartialEq, Debug)]
+pub struct TextureCache {
+    pub textures: HashMap<StyleTextureType, CachedTexture>,
+}
+
+impl TextureCache {
+    fn insert(
+        &mut self,
+        texture_type: StyleTextureType,
+        texture_id: TextureID,
+        seed: StyleTextureSeed,
+    ) {
+        self.textures
+            .insert(texture_type, CachedTexture { seed, texture_id });
+    }
+
+    fn get(&self, texture_type: StyleTextureType) -> Option<CachedTexture> {
+        self.textures.get(&texture_type).cloned()
+    }
+
+    fn values(&self) -> Vec<CachedTexture> {
+        self.textures.values().cloned().collect()
+    }
+}
+
+impl Default for TextureCache {
+    fn default() -> Self {
         Self {
-            position: Position::new(),
-            position_absolute: false,
-            rotation: 0.0,
-            scale: Scale::new(),
-            layer: None,
+            textures: HashMap::new(),
         }
     }
 }
 
-impl Add for Transform {
-    type Output = Transform;
-    fn add(self, rhs: Self) -> Self::Output {
-        Transform {
-            position: self.position + rhs.position,
-            position_absolute: self.position_absolute,
-            rotation: self.rotation + rhs.rotation,
-            scale: Scale {
-                x: self.scale.x * rhs.scale.x,
-                y: self.scale.y * rhs.scale.y,
+#[derive(Clone, PartialEq, Debug)]
+pub struct ResolvedVisualState {
+    pub display: DisplayLayout,
+    pub position: DisplayPosition,
+
+    pub transform: Transform,
+    pub background: Background,
+    pub border: Border,
+    pub padding: Padding,
+    pub margin: Margin,
+    pub text: Text,
+
+    pub size: Size,
+    pub inline_size: Size,
+    pub timer: Option<Duration>,
+    pub timer_start: Option<Instant>,
+}
+
+impl Default for ResolvedVisualState {
+    fn default() -> Self {
+        Self {
+            display: DisplayLayout::Inline,
+            position: DisplayPosition::Static,
+            transform: Transform::default(),
+            background: Background::default(),
+            border: Border::default(),
+            padding: Padding::default(),
+            margin: Margin::default(),
+            text: Text::default(),
+            size: Size {
+                width: 0,
+                height: 0,
             },
-            layer: rhs.layer.or(self.layer),
-        }
-    }
-}
-
-impl Add for &Transform {
-    type Output = Transform;
-    fn add(self, rhs: &Transform) -> Transform {
-        *self + *rhs
-    }
-}
-
-#[derive(Clone, Copy)]
-struct Style {
-    bg_color: Color,
-    bg_image: Option<TextureID>,
-    border_radius: u32,
-    size: Size,
-    timer: Option<Duration>,
-    timer_start: Option<Instant>,
-}
-
-impl Style {
-    pub fn new() -> Self {
-        Self {
-            bg_color: Color::TRANSPARENT,
-            bg_image: None,
-            border_radius: 0,
-            size: Size::new(),
+            inline_size: Size {
+                width: 0,
+                height: 0,
+            },
             timer: None,
             timer_start: None,
         }
     }
 }
 
-#[derive(Clone)]
-pub struct Text {
-    content: Option<String>,
-    align: TextAlign,
-    color: Color,
-    font: Option<FontID>,
-    font_style: FontStyle,
-    font_size: u16,
-}
+impl ResolvedVisualState {
+    fn merge(mut self, layer: &UnresolvedVisualState) -> Self {
+        let UnresolvedVisualState {
+            display,
+            position,
+            transform,
+            background,
+            border,
+            padding,
+            margin,
+            text,
+            size,
+            inline_size,
+            timer,
+            timer_start,
+        } = layer;
 
-impl Text {
-    pub fn new() -> Self {
-        Self {
-            content: None,
-            font: None,
-            font_size: 16,
-            font_style: FontStyle {},
-            color: Color::rgb(0, 0, 0),
-            align: TextAlign {},
+        if let Some(v) = display {
+            self.display = *v;
         }
+        if let Some(v) = position {
+            self.position = *v;
+        }
+        if let Some(v) = size {
+            self.size = *v;
+        }
+        if let Some(v) = inline_size {
+            self.inline_size = *v;
+        }
+
+        self.transform.merge(transform);
+        self.background.merge(background);
+        self.border.merge(border);
+        self.padding.merge(padding);
+        self.margin.merge(margin);
+        self.text.merge(text);
+
+        self.timer = *timer;
+        self.timer_start = *timer_start;
+
+        self
     }
-}
 
-#[derive(Copy, Clone, PartialEq, Eq, Hash)]
-pub enum NodeTexture {
-    Text,
-    Image,
-}
+    fn normal(normal: &UnresolvedVisualState) -> Self {
+        Self::default().merge(normal)
+    }
 
-impl NodeTexture {
-    pub fn all() -> Vec<NodeTexture> {
-        vec![NodeTexture::Text, NodeTexture::Image]
+    fn hover(normal: &UnresolvedVisualState, hover: &UnresolvedVisualState) -> Self {
+        Self::default().merge(normal).merge(hover)
+    }
+
+    fn active(
+        normal: &UnresolvedVisualState,
+        hover: &UnresolvedVisualState,
+        active: &UnresolvedVisualState,
+    ) -> Self {
+        Self::default().merge(normal).merge(hover).merge(active)
     }
 }
 
 #[derive(Clone)]
-struct VisualState {
-    textures: HashMap<NodeTexture, TextureID>,
-    texture_req: HashSet<NodeTexture>,
-    transform: Transform,
-    style: Style,
+struct UnresolvedVisualState {
+    display: Option<DisplayLayout>,
+    position: Option<DisplayPosition>,
+
+    background: Background,
+    border: Border,
+    margin: Margin,
+    padding: Padding,
     text: Text,
+    transform: Transform,
+
+    size: Option<Size>,
+    inline_size: Option<Size>,
+    timer: Option<Duration>,
+    timer_start: Option<Instant>,
 }
 
-impl VisualState {
-    fn new() -> Self {
+impl UnresolvedVisualState {
+    fn empty() -> Self {
         Self {
-            textures: HashMap::new(),
-            texture_req: HashSet::new(),
-            transform: Transform::new(),
-            style: Style::new(),
-            text: Text::new(),
+            display: None,
+            position: None,
+
+            transform: Transform::empty(),
+            background: Background::empty(),
+            border: Border::empty(),
+            padding: Padding::empty(),
+            margin: Margin::empty(),
+            text: Text::empty(),
+
+            size: None,
+            inline_size: None,
+            timer: None,
+            timer_start: None,
         }
     }
-
-    fn add_texture_requirement(&mut self, req: NodeTexture) {
-        self.texture_req.insert(req);
-    }
 }
 
-#[derive(Clone, Copy)]
-enum CurrentVisualState {
+#[derive(Clone, Copy, Hash, PartialEq, Eq, Debug)]
+pub enum StyleVisualState {
     Normal,
     Hover,
     Active,
@@ -149,314 +223,261 @@ enum CurrentVisualState {
 
 #[derive(Clone)]
 pub struct NodeVisual {
-    normal: VisualState,
-    hover: VisualState,
-    active: VisualState,
-    current: CurrentVisualState,
+    normal: UnresolvedVisualState,
+    hover: UnresolvedVisualState,
+    active: UnresolvedVisualState,
+    current: StyleVisualState,
+
+    pub(crate) texture_cache: HashMap<StyleVisualState, TextureCache>,
+    pub(crate) viewport: Size,
 }
 
 impl NodeVisual {
     pub fn new() -> Self {
         Self {
-            normal: VisualState::new(),
-            hover: VisualState::new(),
-            active: VisualState::new(),
-            current: CurrentVisualState::Normal,
+            normal: UnresolvedVisualState::empty(),
+            hover: UnresolvedVisualState::empty(),
+            active: UnresolvedVisualState::empty(),
+            current: StyleVisualState::Normal,
+            texture_cache: HashMap::new(),
+            viewport: Size {
+                width: 0,
+                height: 0,
+            },
         }
     }
 
-    fn current_state(&self) -> &VisualState {
+    pub fn normal(&self) -> ResolvedVisualState {
+        ResolvedVisualState::normal(&self.normal)
+    }
+
+    pub fn hover(&self) -> ResolvedVisualState {
+        ResolvedVisualState::hover(&self.normal, &self.hover)
+    }
+
+    pub fn active(&self) -> ResolvedVisualState {
+        ResolvedVisualState::active(&self.normal, &self.hover, &self.active)
+    }
+
+    pub fn current_resolved_visual_state(&self) -> ResolvedVisualState {
         match self.current {
-            CurrentVisualState::Normal => &self.normal,
-            CurrentVisualState::Hover => &self.hover,
-            CurrentVisualState::Active => &self.active,
+            StyleVisualState::Normal => self.normal(),
+            StyleVisualState::Hover => self.hover(),
+            StyleVisualState::Active => self.active(),
         }
     }
 
-    fn current_state_mut(&mut self) -> &mut VisualState {
+    fn current_unresolved_visual_state(&mut self) -> &mut UnresolvedVisualState {
         match self.current {
-            CurrentVisualState::Normal => &mut self.normal,
-            CurrentVisualState::Hover => &mut self.hover,
-            CurrentVisualState::Active => &mut self.active,
+            StyleVisualState::Normal => &mut self.normal,
+            StyleVisualState::Hover => &mut self.hover,
+            StyleVisualState::Active => &mut self.active,
         }
     }
 
-    fn fusion_state<T>(&mut self, origin: StyleActionOrigin, mut callback: T)
+    fn modify_unresolved_visual_state<T>(&mut self, origin: StyleVisualState, mut callback: T)
     where
-        T: FnMut(&mut VisualState),
+        T: FnMut(&mut UnresolvedVisualState),
     {
         match origin {
-            StyleActionOrigin::Code => {
-                self.set_normal();
-            }
-            StyleActionOrigin::Hover => {
-                self.set_hover();
-            }
-            StyleActionOrigin::Active => {
-                self.set_active();
-            }
-        }
-        match self.current {
-            CurrentVisualState::Normal => {
-                callback(&mut self.normal);
-                callback(&mut self.hover);
-                callback(&mut self.active);
-            }
-            CurrentVisualState::Hover => {
-                callback(&mut self.hover);
-                callback(&mut self.active);
-            }
-            CurrentVisualState::Active => {
-                callback(&mut self.active);
-            }
+            StyleVisualState::Normal => callback(&mut self.normal),
+            StyleVisualState::Hover => callback(&mut self.hover),
+            StyleVisualState::Active => callback(&mut self.active),
         }
     }
 
-    /* Texture Management */
-
-    pub fn get_texture(&self, req: NodeTexture) -> Option<TextureID> {
-        self.current_state().textures.get(&req).copied()
-    }
-
-    pub fn get_all_textures(&self) -> Vec<TextureID> {
-        let mut textures: Vec<TextureID> = Vec::new();
-        textures.extend(self.normal.textures.values());
-        textures.extend(self.hover.textures.values());
-        textures.extend(self.active.textures.values());
+    /* Textures */
+    pub(crate) fn get_all_textures(&self) -> Vec<TextureID> {
+        let mut textures = Vec::new();
+        for cache in self.texture_cache.values() {
+            textures.extend(cache.values().iter().filter_map(|texture| {
+                if texture.id() == TextureID::none() {
+                    None
+                } else {
+                    Some(texture.id())
+                }
+            }));
+        }
         textures
     }
 
-    pub fn texture_required(&self, req: NodeTexture) -> bool {
-        self.current_state().texture_req.contains(&req)
+    pub(crate) fn set_texture_cache(
+        &mut self,
+        texture_type: StyleTextureType,
+        texture: TextureID,
+        state: StyleVisualState,
+    ) {
+        let seed = match texture_type {
+            StyleTextureType::Background => StyleTextureSeed::Background(self.get_background()),
+            StyleTextureType::Text => StyleTextureSeed::Text(self.get_text()),
+        };
+        self.texture_cache
+            .entry(state)
+            .or_default()
+            .insert(texture_type, texture, seed);
     }
 
-    pub fn set_texture(&mut self, id: TextureID, req: NodeTexture) {
-        self.current_state_mut().textures.insert(req, id);
-        self.current_state_mut().texture_req.remove(&req);
+    pub fn get_texture_cache(&mut self, texture_type: StyleTextureType) -> Option<CachedTexture> {
+        let asd = self
+            .texture_cache
+            .entry(self.current)
+            .or_default()
+            .get(texture_type);
+        asd
     }
 
     /* Getter */
 
-    pub fn get_bg_color(&self) -> Color {
-        self.current_state().style.bg_color
+    pub fn current_visual_state(&self) -> StyleVisualState {
+        self.current
     }
 
-    pub fn get_border_radius(&self) -> u32 {
-        self.current_state().style.border_radius
+    pub fn get_display(&self) -> DisplayLayout {
+        self.current_resolved_visual_state().display
     }
 
-    pub fn get_current_timer(&self) -> Option<Duration> {
-        self.current_state().style.timer
+    pub fn get_position(&self) -> DisplayPosition {
+        self.current_resolved_visual_state().position
     }
 
-    pub fn get_current_timer_start(&self) -> Option<Instant> {
-        self.current_state().style.timer_start
+    pub fn get_transform(&self) -> Transform {
+        self.current_resolved_visual_state().transform
+    }
+
+    pub fn get_background(&self) -> Background {
+        self.current_resolved_visual_state().background
+    }
+
+    pub fn get_padding(&self) -> Padding {
+        self.current_resolved_visual_state().padding
+    }
+
+    pub fn get_border(&self) -> Border {
+        self.current_resolved_visual_state().border
+    }
+
+    pub fn get_margin(&self) -> Margin {
+        self.current_resolved_visual_state().margin
+    }
+
+    pub fn get_text(&self) -> Text {
+        self.current_resolved_visual_state().text.clone()
     }
 
     pub fn get_size(&self) -> Size {
-        self.current_state().style.size
+        self.current_resolved_visual_state().size
     }
 
-    pub fn get_relative_position(&self) -> Position {
-        self.current_state().transform.position
+    pub fn get_inline_size(&self) -> Size {
+        self.current_resolved_visual_state().inline_size
     }
 
-    pub fn is_position_absolute(&self) -> bool {
-        self.current_state().transform.position_absolute
+    pub fn get_current_timer(&self) -> Option<Duration> {
+        self.current_resolved_visual_state().timer
     }
 
-    pub fn get_rotation(&self) -> f32 {
-        self.current_state().transform.rotation
-    }
-
-    pub fn get_scale(&self) -> Scale {
-        self.current_state().transform.scale
-    }
-
-    pub fn get_layer(&self) -> Option<usize> {
-        self.current_state().transform.layer
-    }
-
-    pub fn get_bounding_box(&self) -> Size {
-        Size {
-            width: (self.get_size().width as f32 * self.get_scale().x)
-                .abs()
-                .round() as u32,
-            height: (self.get_size().height as f32 * self.get_scale().y)
-                .abs()
-                .round() as u32,
-        }
-    }
-
-    pub fn get_content(&self) -> String {
-        if let Some(content) = &self.current_state().text.content {
-            content.clone()
-        } else {
-            "".to_string()
-        }
-    }
-
-    pub fn get_text_align(&self) -> TextAlign {
-        self.current_state().text.align
-    }
-
-    pub fn get_font_size(&self) -> u16 {
-        self.current_state().text.font_size
-    }
-
-    pub fn get_font(&self) -> Option<FontID> {
-        self.current_state().text.font
-    }
-
-    pub fn get_font_style(&self) -> FontStyle {
-        self.current_state().text.font_style
-    }
-
-    pub fn get_text_color(&self) -> Color {
-        self.current_state().text.color
+    pub fn get_current_timer_start(&self) -> Option<Instant> {
+        self.current_resolved_visual_state().timer_start
     }
 
     /* Setter */
 
-    pub fn set_bg_color(&mut self, color: Color, origin: StyleActionOrigin) {
-        self.fusion_state(origin, |state| {
-            state.style.bg_color = color;
+    pub fn set_display(&mut self, display: DisplayLayout, origin: StyleVisualState) {
+        self.modify_unresolved_visual_state(origin, |state| {
+            state.display = Some(display);
         });
     }
 
-    pub fn set_border_radius(&mut self, radius: u32, origin: StyleActionOrigin) {
-        self.fusion_state(origin, |state| {
-            state.style.border_radius = radius;
+    pub fn set_position(&mut self, position: DisplayPosition, origin: StyleVisualState) {
+        self.modify_unresolved_visual_state(origin, |state| {
+            state.position = Some(position);
         });
     }
 
-    pub fn set_timer(&mut self, ms: u64) {
-        self.current_state_mut().style.timer = Some(Duration::from_millis(ms));
-        self.current_state_mut().style.timer_start = Some(Instant::now());
-    }
-
-    pub fn set_size(&mut self, width: u32, height: u32, origin: StyleActionOrigin) {
-        self.fusion_state(origin, |state| {
-            state.style.size = Size { width, height };
+    pub fn set_transform(&mut self, transform: Transform, origin: StyleVisualState) {
+        self.modify_unresolved_visual_state(origin, |state| {
+            state.transform = transform.clone();
         });
     }
 
-    pub fn set_position(&mut self, position: Position, origin: StyleActionOrigin) {
-        self.fusion_state(origin, |state| {
-            state.transform.position = position;
+    pub fn set_background(&mut self, background: Background, origin: StyleVisualState) {
+        self.modify_unresolved_visual_state(origin, |state| {
+            state.background = background.clone();
         });
     }
 
-    pub fn set_position_absolute(&mut self, origin: StyleActionOrigin) {
-        self.fusion_state(origin, |state| {
-            state.transform.position_absolute = true;
+    pub fn set_border(&mut self, border: Border, origin: StyleVisualState) {
+        self.modify_unresolved_visual_state(origin, |state| {
+            state.border = border.clone();
         });
     }
 
-    pub fn set_position_relative(&mut self, origin: StyleActionOrigin) {
-        self.fusion_state(origin, |state| {
-            state.transform.position_absolute = false;
+    pub fn set_padding(&mut self, padding: Padding, origin: StyleVisualState) {
+        self.modify_unresolved_visual_state(origin, |state| {
+            state.padding = padding.clone();
         });
     }
 
-    pub fn set_rotation(&mut self, rotation: f32, origin: StyleActionOrigin) {
-        self.fusion_state(origin, |state| {
-            state.transform.rotation = rotation;
+    pub fn set_margin(&mut self, margin: Margin, origin: StyleVisualState) {
+        self.modify_unresolved_visual_state(origin, |state| {
+            state.margin = margin.clone();
         });
     }
 
-    pub fn set_scale(&mut self, x: f32, y: f32, origin: StyleActionOrigin) {
-        self.fusion_state(origin, |state| {
-            state.transform.scale = Scale { x, y };
+    pub fn set_text(&mut self, text: Text, origin: StyleVisualState) {
+        self.modify_unresolved_visual_state(origin, move |state| {
+            state.text = text.clone();
         });
     }
 
-    pub fn set_layer(&mut self, layer: usize, origin: StyleActionOrigin) {
-        self.fusion_state(origin, |state| {
-            state.transform.layer = Some(layer);
+    pub fn set_size(&mut self, size: Size, origin: StyleVisualState) {
+        self.modify_unresolved_visual_state(origin, |state| {
+            state.size = Some(size);
         });
     }
 
-    pub(crate) fn clear_current_timer(&mut self) {
-        self.current_state_mut().style.timer = None;
-        self.current_state_mut().style.timer_start = None;
-    }
-
-    pub(crate) fn clear_normal_timer(&mut self) {
-        self.normal.style.timer = None;
-        self.normal.style.timer_start = None;
-    }
-
-    pub(crate) fn clear_hover_timer(&mut self) {
-        self.hover.style.timer = None;
-        self.hover.style.timer_start = None;
-    }
-
-    pub(crate) fn clear_active_timer(&mut self) {
-        self.active.style.timer = None;
-        self.active.style.timer_start = None;
-    }
-
-    pub fn set_content(&mut self, content: String, origin: StyleActionOrigin) {
-        self.fusion_state(origin, |state| {
-            state.text.content = Some(content.clone());
-            state.add_texture_requirement(NodeTexture::Text);
+    pub fn set_inline_size(&mut self, size: Size, origin: StyleVisualState) {
+        self.modify_unresolved_visual_state(origin, |state| {
+            state.inline_size = Some(size);
         });
     }
 
-    pub fn set_text_align(&mut self, align: TextAlign, origin: StyleActionOrigin) {
-        self.fusion_state(origin, |state| {
-            state.text.align = align;
-            state.add_texture_requirement(NodeTexture::Text);
-        });
-    }
-
-    pub fn set_font_size(&mut self, size: u16, origin: StyleActionOrigin) {
-        self.fusion_state(origin, |state| {
-            state.text.font_size = size;
-            state.add_texture_requirement(NodeTexture::Text);
-        });
-    }
-
-    pub fn set_font(&mut self, font: FontID, origin: StyleActionOrigin) {
-        self.fusion_state(origin, |state| {
-            state.text.font = Some(font);
-            state.add_texture_requirement(NodeTexture::Text);
-        });
-    }
-
-    pub fn set_font_style(&mut self, style: FontStyle, origin: StyleActionOrigin) {
-        self.fusion_state(origin, |state| {
-            state.text.font_style = style;
-            state.add_texture_requirement(NodeTexture::Text);
-        });
-    }
-
-    pub fn set_text_color(&mut self, color: Color, origin: StyleActionOrigin) {
-        self.fusion_state(origin, |state| {
-            state.text.color = color;
-            state.add_texture_requirement(NodeTexture::Text);
-        });
-    }
-
-    pub fn set_bg_image(&mut self, image: TextureID, origin: StyleActionOrigin) {
-        self.fusion_state(origin, |state| {
-            state.style.bg_image = Some(image);
-            state.add_texture_requirement(NodeTexture::Image);
-        });
+    pub fn wait(&mut self, ms: u64) {
+        self.current_unresolved_visual_state().timer = Some(Duration::from_millis(ms));
+        self.current_unresolved_visual_state().timer_start = Some(Instant::now());
     }
 
     /* State Change */
 
     pub(crate) fn set_normal(&mut self) {
-        self.current = CurrentVisualState::Normal;
+        self.current = StyleVisualState::Normal;
     }
 
     pub(crate) fn set_hover(&mut self) {
-        self.current = CurrentVisualState::Hover;
+        self.current = StyleVisualState::Hover;
     }
 
     pub(crate) fn set_active(&mut self) {
-        self.current = CurrentVisualState::Active;
+        self.current = StyleVisualState::Active;
+    }
+
+    pub(crate) fn clear_current_state_timer(&mut self) {
+        self.current_unresolved_visual_state().timer = None;
+        self.current_unresolved_visual_state().timer_start = None;
+    }
+
+    pub(crate) fn clear_normal_timer(&mut self) {
+        self.normal.timer = None;
+        self.normal.timer_start = None;
+    }
+
+    pub(crate) fn clear_hover_timer(&mut self) {
+        self.hover.timer = None;
+        self.hover.timer_start = None;
+    }
+
+    pub(crate) fn clear_active_timer(&mut self) {
+        self.active.timer = None;
+        self.active.timer_start = None;
     }
 }

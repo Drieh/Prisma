@@ -4,7 +4,7 @@ use crate::{
     app::{CloseRequest, error::PrismaError},
     event::{Event, EventCallback, EventCallbackID, EventData, EventType},
     scene::{
-        NodeID, NodeView,
+        NodeID, Node,
         storage::{NodeStorage, StorageHandler},
     },
 };
@@ -124,12 +124,24 @@ impl<'a> EventContext<'a> {
         }
     }
 
-    pub fn target(&mut self) -> Option<NodeView<'_>> {
-        self.get_node(self.target.as_ref()?.original).ok()
+    pub fn target(&mut self) -> Node<'_> {
+        self.get_node(
+            self.target
+                .as_ref()
+                .expect("There is no original target in this event.")
+                .original,
+        )
+        .unwrap()
     }
 
-    pub fn current_target(&mut self) -> Option<NodeView<'_>> {
-        self.get_node(self.target.as_ref()?.current).ok()
+    pub fn current_target(&mut self) -> Node<'_> {
+        self.get_node(
+            self.target
+                .as_ref()
+                .expect("There is no current target in this event.")
+                .current,
+        )
+        .unwrap()
     }
 
     pub fn stop_propagation(&mut self) {
@@ -164,7 +176,7 @@ impl<'a> EventContext<'a> {
         self.pending_destroyed_event_listeners.push(target);
     }
 
-    pub fn new_node(&mut self) -> NodeView<'_> {
+    pub fn new_node(&mut self) -> Node<'_> {
         let new_node = self.nodes.new_node();
         self.pending_created_nodes.push(new_node.get_id());
         new_node
@@ -208,8 +220,8 @@ impl<'a> EventContext<'a> {
         std::mem::take(&mut self.pending_destroyed_event_listeners)
     }
 
-    pub fn get_node(&mut self, id: NodeID) -> Result<NodeView<'_>, PrismaError> {
-        NodeView::new(id, self.nodes)
+    pub fn get_node(&mut self, id: NodeID) -> Result<Node<'_>, PrismaError> {
+        Node::new(id, self.nodes)
     }
 
     pub(crate) fn take_created_nodes(&mut self) -> Vec<NodeID> {

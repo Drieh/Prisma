@@ -19,14 +19,14 @@ pub struct StorageHandler<'a> {
 }
 impl<'a> StorageHandler<'a> {
     /// Returns `true` if the node exists.
-    pub fn has_node(&self, id: NodeID) -> bool {
+    pub fn contains(&self, id: NodeID) -> bool {
         let Self {
             tree,
             state,
-            visual: visual_state,
+            visual,
             queue,
         } = self;
-        tree.contains(id) && state.contains(id) && visual_state.contains(id) && queue.contains(id)
+        tree.contains(id) && state.contains(id) && visual.contains(id) && queue.contains(id)
     }
 
     /// Returns a list of all existing nodes.
@@ -38,12 +38,12 @@ impl<'a> StorageHandler<'a> {
         let Self {
             tree,
             state,
-            visual: visual_state,
+            visual,
             queue,
         } = self;
         queue.insert(id);
         state.insert(id);
-        visual_state.insert(id);
+        visual.insert(id);
         tree.insert(id);
     }
 
@@ -51,12 +51,17 @@ impl<'a> StorageHandler<'a> {
         let Self {
             tree,
             state,
-            visual: visual_state,
+            visual,
             queue,
         } = self;
+
+        if let Some(parent) = tree.get_unchecked(id).get_parent() {
+            tree.get_unchecked_mut(parent).remove_child(id);
+        }
+
         queue.remove(id);
         state.remove(id);
-        visual_state.remove(id);
+        visual.remove(id);
         tree.remove(id);
     }
 }

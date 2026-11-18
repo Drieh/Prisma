@@ -46,9 +46,7 @@ where
     pub fn remove_registry(&mut self, id: T::ResourceID) -> Result<ResourceEntry<T>, PrismaError> {
         self.registry
             .remove(&id)
-            .ok_or(PrismaError::ResourceNotFound(
-                "No registry to remove".to_string(),
-            ))
+            .ok_or(PrismaError::resource_not_found("No registry to remove."))
     }
 
     pub fn register_user(
@@ -103,8 +101,8 @@ where
             path: path.to_path_buf(),
             file_name: path
                 .file_name()
-                .ok_or(PrismaError::ResourceNotFound(
-                    "Failed to create resource registry".to_string(),
+                .ok_or(PrismaError::resource_not_found(
+                    "Failed to create resource registry",
                 ))?
                 .to_string_lossy()
                 .to_string(),

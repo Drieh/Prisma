@@ -2,8 +2,8 @@ use crate::{
     error::PrismaError,
     event::{EventCallback, EventCallbackID, EventContext, EventData},
     node::{
-        EventListenerAction, NodeTreeAction, StyleActionOrigin,
-        component::{NodeQueue, NodeVisual},
+        EventListenerAction, NodeTreeAction,
+        component::{NodeQueue, NodeVisual, StyleVisualState},
         style_view::StyleView,
     },
     scene::{
@@ -11,7 +11,7 @@ use crate::{
         node::component::NodeState,
         storage::{NodeStorage, StorageHandler},
     },
-    util::{Color, Position, Size},
+    util::{Border, Color, DisplayLayout, Margin, Padding, Position, Scale, Size},
 };
 use std::{
     any::Any,
@@ -21,11 +21,11 @@ use std::{
 /// Provides mutable access to a node.
 ///
 /// All modifications to a node must be performed through this type.
-pub struct NodeView<'a> {
+pub struct Node<'a> {
     id: NodeID,
     storage: StorageHandler<'a>,
 }
-impl<'a> NodeView<'a> {
+impl<'a> Node<'a> {
     pub(crate) fn new(id: NodeID, nodes: &'a mut NodeStorage) -> Result<Self, PrismaError> {
         if nodes.exists(id) {
             Ok(Self {
@@ -44,25 +44,20 @@ impl<'a> NodeView<'a> {
     }
 
     /// Returns an immutable reference to the node's `NodeVisual` component
-    pub fn get_node_visual(&self) -> &NodeVisual {
+    pub fn get_visual(&self) -> &NodeVisual {
         self.storage.visual.get_unchecked(self.id)
     }
 
-    /// Returns an immutable reference to the node's `NodeVisual` component
-    pub(crate) fn get_node_visual_mut(&mut self) -> &mut NodeVisual {
+    pub fn get_visual_mut(&mut self) -> &mut NodeVisual {
         self.storage.visual.get_unchecked_mut(self.id)
     }
 
-    pub(crate) fn get_node_state(&mut self) -> &mut NodeState {
+    pub(crate) fn state(&mut self) -> &mut NodeState {
         self.storage.state.get_unchecked_mut(self.id)
     }
 
-    pub(crate) fn get_node_queue(&mut self) -> &mut NodeQueue {
+    pub(crate) fn queue(&mut self) -> &mut NodeQueue {
         self.storage.queue.get_unchecked_mut(self.id)
-    }
-
-    fn style(&mut self) -> StyleView<'_> {
-        StyleView::new(self.get_node_queue(), StyleActionOrigin::Code)
     }
 
     /// Stores a custom [`Any`] value.
@@ -70,7 +65,7 @@ impl<'a> NodeView<'a> {
     /// The value can later be retrieved using [`NodeView::get_state`] or
     /// [`NodeView::get_state_mut`].
     pub fn set_state<T: Any>(&mut self, value: T) {
-        self.get_node_state().set::<T>(value);
+        self.state().set::<T>(value);
     }
 
     /// Returns a mutable reference to a custom [`Any`] value.
@@ -81,7 +76,7 @@ impl<'a> NodeView<'a> {
     ///
     /// Returns [`PrismaError::NodeStateNotFound`] if the key does not exist.
     pub fn get_state_mut<T: Any>(&mut self) -> Result<&mut T, PrismaError> {
-        self.get_node_state().get_mut::<T>()
+        self.state().get_mut::<T>()
     }
 
     /// Returns an immutable reference to the custom [`Any`] value.
@@ -93,6 +88,14 @@ impl<'a> NodeView<'a> {
     /// Returns [`PrismaError::NodeStateNotFound`] if the key does not exist.
     pub fn get_state<T: Any>(&self) -> Result<&T, PrismaError> {
         self.storage.state.get_unchecked(self.id).get::<T>()
+    }
+
+    pub fn try_state<T: Any>(&self) -> Option<&T> {
+        self.get_state().ok()
+    }
+
+    pub fn try_state_mut<T: Any>(&mut self) -> Option<&mut T> {
+        self.get_state_mut().ok()
     }
 
     /// Returns `true` if the given state exists.
@@ -108,7 +111,7 @@ impl<'a> NodeView<'a> {
     ///
     /// Returns [`PrismaError::NodeStateNotFound`] if the given key does not exist.
     pub fn remove_state<T: Any>(&mut self) -> Result<T, PrismaError> {
-        self.get_node_state().remove::<T>()
+        self.state().remove::<T>()
     }
 
     /// Returns the node and all of its descendants recursively.
@@ -122,7 +125,7 @@ impl<'a> NodeView<'a> {
     ///
     /// This operation is deferred.
     pub fn destroy(&mut self) {
-        self.get_node_state().destruction_requested = true;
+        self.state().destruction_requested = true;
     }
 
     pub fn is_destruction_requested(&self) -> bool {
@@ -144,7 +147,7 @@ impl<'a> NodeView<'a> {
     ///
     /// Returns [`PrismaError::NodeNotFound`] if the child node does not exist.
     pub fn add_child(&mut self, child: NodeID) -> Result<&mut Self, PrismaError> {
-        if !self.storage.has_node(child) {
+        if !self.storage.contains(child) {
             return Err(PrismaError::NodeNotFound(child));
         }
         if self.id == child {
@@ -156,7 +159,7 @@ impl<'a> NodeView<'a> {
             return Err(PrismaError::InvalidTree(self.id, child));
         }
 
-        self.get_node_queue()
+        self.queue()
             .push_back::<NodeTreeAction>(NodeTreeAction::AddChild { child });
         Ok(self)
     }
@@ -173,10 +176,10 @@ impl<'a> NodeView<'a> {
     ///
     /// Returns [`PrismaError::NodeNotFound`] if the child node does not exist.
     pub fn remove_child(&mut self, child: NodeID) -> Result<&mut Self, PrismaError> {
-        if !self.storage.has_node(child) {
+        if !self.storage.contains(child) {
             return Err(PrismaError::NodeNotFound(child));
         }
-        self.get_node_queue()
+        self.queue()
             .push_back(NodeTreeAction::RemoveChild { child });
         Ok(self)
     }
@@ -192,10 +195,10 @@ impl<'a> NodeView<'a> {
     /// Returns [`PrismaError::NodeNotFound`] if the parent node does not exist.
     pub fn set_parent(&mut self, parent: Option<NodeID>) -> Result<&mut Self, PrismaError> {
         if let Some(parent) = parent {
-            if !self.storage.has_node(parent) {
+            if !self.storage.contains(parent) {
                 return Err(PrismaError::NodeNotFound(parent));
             }
-            self.get_node_queue().push_back(NodeTreeAction::SetParent {
+            self.queue().push_back(NodeTreeAction::SetParent {
                 parent: Some(parent),
             });
         }
@@ -212,147 +215,152 @@ impl<'a> NodeView<'a> {
         self.storage.tree.get_unchecked(self.id).get_children()
     }
 
-    /// Returns the size of the node's bounding box after applying its current scale.
-    pub fn get_bounding_box(&self) -> Size {
-        self.get_node_visual().get_bounding_box()
-    }
-
-    /// Returns the size of the node's box before applying its current scale.
-    pub fn get_size(&self) -> Size {
-        self.get_node_visual().get_size()
-    }
-
-    /// Returns the node's position relative to its parent.
-    pub fn get_relative_position(&self) -> Position {
-        self.get_node_visual().get_relative_position()
-    }
-
     /// Returns the node's position relative to the scene.
-    pub fn get_absolute_position(&mut self) -> Position {
-        self.absolute_position(self.id).unwrap()
+    pub fn get_scene_position(&mut self) -> Position {
+        self.scene_position(self.id).unwrap()
     }
 
-    fn absolute_position(&mut self, id: NodeID) -> Result<Position, PrismaError> {
-        if !self.storage.has_node(id) {
+    fn scene_position(&mut self, id: NodeID) -> Result<Position, PrismaError> {
+        if !self.storage.contains(id) {
             return Err(PrismaError::NodeNotFound(id));
         }
-        let self_transform = self.storage.visual.get_unchecked(id).clone();
-        if !self_transform.is_position_absolute()
-            && let tree = self.storage.tree.get_unchecked(id).clone()
+        let node_visual = self.storage.visual.get_unchecked(id).clone();
+        let x = node_visual.get_transform().get_x();
+        let y = node_visual.get_transform().get_y();
+
+        if let tree = self.storage.tree.get_unchecked(id).clone()
             && let Some(parent) = tree.get_parent()
         {
-            Ok(self.absolute_position(parent)? + self_transform.get_relative_position())
+            Ok(self.scene_position(parent)? + Position { x, y })
         } else {
-            Ok(self_transform.get_relative_position())
+            Ok(Position { x, y })
         }
     }
 
-    /// Sets the node's position to the given `x` and `y` immediately.
-    ///
-    /// # Behavior
-    ///
-    /// This operation is immediate.
-    pub fn position(&mut self, x: i32, y: i32) -> &mut Self {
-        self.get_node_visual_mut()
-            .set_position(Position { x, y }, StyleActionOrigin::Code);
-
-        self
+    pub fn get_content_box(&self) -> Size {
+        self.get_visual().get_size()
     }
 
-    /// Sets the node's position as an absolute position relative to the scene.
-    ///
-    /// # Behavior
-    ///
-    /// This operation is immediate.
-    pub fn position_absolute(&mut self) -> &mut Self {
-        self.get_node_visual_mut()
-            .set_position_absolute(StyleActionOrigin::Code);
-        self
+    pub fn get_bounding_box(&self) -> Size {
+        let content_box = self.get_content_box();
+        let node_visual = self.get_visual();
+        let Size {
+            width: inline_w,
+            height: inline_h,
+        } = node_visual.get_inline_size();
+        let scale_x = node_visual.get_transform().get_scale_x();
+        let scale_y = node_visual.get_transform().get_scale_y();
+
+        match node_visual.get_display() {
+            DisplayLayout::Block => Size {
+                width: node_visual.viewport.width,
+                height: inline_h,
+            },
+            DisplayLayout::Inline => node_visual.get_inline_size(),
+
+            DisplayLayout::InlineBlock => Size {
+                width: (content_box.width as f32 * scale_x)
+                    .max(inline_w as f32)
+                    .abs()
+                    .round() as u32,
+                height: (content_box.height as f32 * scale_y)
+                    .max(inline_h as f32)
+                    .abs()
+                    .round() as u32,
+            },
+            DisplayLayout::None => Size {
+                width: 0,
+                height: 0,
+            },
+        }
     }
 
-    /// Sets the node's position relative to its parent or the scene if it has no parent.
-    ///
-    /// # Behavior
-    ///
-    /// This operation is immediate.
-    pub fn position_relative(&mut self) -> &mut Self {
-        self.get_node_visual_mut()
-            .set_position_relative(StyleActionOrigin::Code);
-        self
+    pub fn get_padding_box(&self) -> Size {
+        let bounding_box = self.get_bounding_box();
+        let node_visual = self.get_visual();
+        let left = node_visual.get_padding().get_left();
+        let top = node_visual.get_padding().get_top();
+        let right = node_visual.get_padding().get_right();
+        let bottom = node_visual.get_padding().get_bottom();
+
+        if node_visual.get_display() == DisplayLayout::Block {
+            Size {
+                width: bounding_box.width,
+                height: bounding_box.height + top + bottom,
+            }
+        } else {
+            Size {
+                width: bounding_box.width + left + right,
+                height: bounding_box.height + top + bottom,
+            }
+        }
     }
 
-    /// Sets the node's scale.
-    ///
-    /// # Behavior
-    ///
-    /// This operation is immediate.
-    pub fn scale(&mut self, x: f32, y: f32) -> &mut Self {
-        self.get_node_visual_mut()
-            .set_scale(x, y, StyleActionOrigin::Code);
-        self
+    pub fn get_border_box(&self) -> Size {
+        let padding_box = self.get_padding_box();
+        let node_visual = self.get_visual();
+        let padding = node_visual.get_padding();
+
+        let border_top = padding.get_top();
+        let border_bottom = padding.get_bottom();
+        let border_left = padding.get_left();
+        let border_right = padding.get_right();
+
+        let height = padding_box.height + border_top + border_bottom;
+
+        if node_visual.get_display() == DisplayLayout::Block {
+            Size {
+                width: padding_box.width,
+                height,
+            }
+        } else {
+            Size {
+                width: padding_box.width + border_left + border_right,
+                height,
+            }
+        }
     }
 
-    /// Sets the node's size.
-    ///
-    /// # Behavior
-    ///
-    /// This operation is immediate.
-    pub fn size(&mut self, width: u32, height: u32) -> &mut Self {
-        self.get_node_visual_mut()
-            .set_size(width, height, StyleActionOrigin::Code);
-        self
-    }
+    pub fn get_margin_box(&self) -> Size {
+        let padding_box = self.get_padding_box();
+        let node_visual = self.get_visual();
+        let margin = node_visual.get_margin();
 
-    /// Sets the background color of the node.
-    ///
-    /// # Behavior
-    ///
-    /// This operation is immediate.
-    pub fn bg_color(&mut self, color: Color) -> &mut Self {
-        self.get_node_visual_mut()
-            .set_bg_color(color, StyleActionOrigin::Code);
-        self
-    }
+        let left = margin.get_left();
+        let top = margin.get_top();
+        let right = margin.get_right();
+        let bottom = margin.get_bottom();
 
-    /// Sets the layer of the node.
-    ///
-    /// Higher layers are rendered on top of lower layers.
-    ///
-    /// # Behavior
-    ///
-    /// This operation is immediate.
-    pub fn layer(&mut self, layer: usize) -> &mut Self {
-        self.get_node_visual_mut()
-            .set_layer(layer, StyleActionOrigin::Code);
-        self
-    }
-
-    /// Sets the border radius of the node.
-    ///
-    /// # Behavior
-    ///
-    /// This operation is immediate.
-    pub fn border_radius(&mut self, radius: u32) -> &mut Self {
-        self.get_node_visual_mut()
-            .set_border_radius(radius, StyleActionOrigin::Code);
-        self
+        if node_visual.get_display() == DisplayLayout::Block {
+            Size {
+                width: padding_box.width,
+                height: padding_box.height + top + bottom,
+            }
+        } else {
+            Size {
+                width: padding_box.width + left + right,
+                height: padding_box.height + top + bottom,
+            }
+        }
     }
 
     /// Sets the actions applied while the node is active.
-    pub fn on_active<F>(&mut self, callback: F) -> &mut Self
+    pub fn active<F>(&mut self, mut callback: F) -> &mut Self
     where
         F: FnMut(&mut StyleView<'_>) + 'static,
     {
-        self.get_node_state().style_on_active = Some(Box::new(callback));
+        callback(&mut StyleView::new(self.queue(), StyleVisualState::Active));
+        self.state().style_on_active = Some(Box::new(callback));
         self
     }
 
     /// Sets the actions applied while the node is hovered.
-    pub fn on_hover<F>(&mut self, callback: F) -> &mut Self
+    pub fn hover<F>(&mut self, mut callback: F) -> &mut Self
     where
         F: FnMut(&mut StyleView<'_>) + 'static,
     {
-        self.get_node_state().style_on_hover = Some(Box::new(callback));
+        callback(&mut StyleView::new(self.queue(), StyleVisualState::Hover));
+        self.state().style_on_hover = Some(Box::new(callback));
         self
     }
 
@@ -361,8 +369,10 @@ impl<'a> NodeView<'a> {
     /// # Examples
     ///
     /// ```
-    /// scene.new_node().with_style(|style| {
-    ///     style.size(100, 100).bg_color(Color::RED);
+    /// scene.new_node().style(|style| {
+    ///     style.background(|bg| {
+    ///         bg.color(Color::RED);
+    ///     })
     /// });
     /// ```
     ///
@@ -371,11 +381,11 @@ impl<'a> NodeView<'a> {
     /// All operations made with this function are deferred.
     ///
     /// Creates a 100 x 100 pixel node with a red background color.
-    pub fn with_style<F>(&mut self, mut callback: F) -> &mut Self
+    pub fn style<F>(&mut self, mut callback: F) -> &mut Self
     where
         F: FnMut(&mut StyleView<'_>) + 'static,
     {
-        callback(&mut self.style());
+        callback(&mut StyleView::new(self.queue(), StyleVisualState::Normal));
         self
     }
 
@@ -396,7 +406,7 @@ impl<'a> NodeView<'a> {
             let event = ctx.expect_event::<T>().unwrap();
             callback(ctx, event);
         };
-        self.get_node_queue().push_back(EventListenerAction::Add {
+        self.queue().push_back(EventListenerAction::Add {
             event_type: T::TYPE,
             callback: EventCallback::new(real_callback),
         });
@@ -405,19 +415,19 @@ impl<'a> NodeView<'a> {
 
     /// Removes the callback identified by the given [`EventCallbackID`].
     pub fn off_event(&mut self, target: EventCallbackID) -> &mut Self {
-        self.get_node_queue()
+        self.queue()
             .push_back(EventListenerAction::Remove { target });
         self
     }
 }
 
-impl<'a> Display for NodeView<'a> {
+impl<'a> Display for Node<'a> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "Node view for node {}", self.id)
     }
 }
 
-impl<'a> Debug for NodeView<'a> {
+impl<'a> Debug for Node<'a> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "Node view for node {}", self.id)
     }

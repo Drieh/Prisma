@@ -8,6 +8,8 @@ use prismae::event::WindowCloseRequest;
 use prismae::node::NodeID;
 use prismae::resources::Font;
 use prismae::util::Color;
+use prismae::util::DisplayLayout;
+use prismae::util::Size;
 
 type PopupActive = bool;
 type PopupID = NodeID;
@@ -19,26 +21,41 @@ fn main() -> Result<(), PrismaError> {
 
     let mut scene = Scene::new();
 
-    let button = scene
+    scene
         .new_node()
-        .with_style(move |style| {
+        .style(move |style| {
             style
-                .bg_color(Color::RED)
-                .size(100, 100)
-                .position(100, 100)
-                .content("Abrir popup".to_string())
-                .font_family(font_roboto.to_owned());
+                .background(|bg| {
+                    bg.color(Color::GREEN);
+                })
+                .size(Size {
+                    width: 100,
+                    height: 100,
+                })
+                .transform(|transform| {
+                    transform.x(100).y(100);
+                })
+                .text(move |text| {
+                    text.content("abrir popup!".into())
+                        .font_family(font_roboto)
+                        .font_size(32);
+                });
         })
-        .on_hover(|style| {
-            style.bg_color(Color::GREEN);
+        .hover(|style| {
+            style
+                .background(|bg| {
+                    bg.color(Color::GREEN);
+                })
+                .text(|text| {
+                    //text.content("abrir popup hover".into());
+                });
         })
         .on_event::<NodeCreation>(|ctx, _| {
-            ctx.current_target()
-                .unwrap()
-                .set_state::<PopupActive>(false);
+            ctx.current_target().set_state::<PopupActive>(false);
+            println!("creatoon")
         })
         .on_event::<Click>(move |ctx, _| {
-            let mut node = ctx.current_target().unwrap();
+            let mut node = ctx.current_target();
             let popup_active = *node.get_state::<PopupActive>().unwrap();
             node.set_state::<PopupActive>(!popup_active);
 
@@ -48,17 +65,28 @@ fn main() -> Result<(), PrismaError> {
             } else {
                 let popup = ctx
                     .new_node()
-                    .with_style(move |style| {
+                    .style(move |style| {
                         style
-                            .bg_color(Color::YELLOW)
-                            .layer(1)
-                            .position(200, 200)
-                            .size(500, 350)
-                            .content("chupalo".to_string())
-                            .font_family(font_roboto);
+                            .background(|bg| {
+                                bg.color(Color::YELLOW);
+                            })
+                            .transform(|transform| {
+                                transform.layer(1).x(200).y(200);
+                            })
+                            .size(Size {
+                                width: 200,
+                                height: 200,
+                            })
+                            .text(move |text| {
+                                text.content("hola".into()).font_family(font_roboto);
+                            });
+                    })
+                    .hover(|style| {
+                        style.display(DisplayLayout::InlineBlock);
                     })
                     .get_id();
-                ctx.current_target().unwrap().set_state::<PopupID>(popup);
+                ctx.current_target().set_state::<PopupID>(popup);
+                ctx.current_target().add_child(popup).unwrap();
             }
         })
         .get_id();

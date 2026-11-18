@@ -1,6 +1,12 @@
 use sdl3::{VideoSubsystem, video::WindowFlags};
 
-use crate::{Scene, error::PrismaError, render::Renderer, resources::manager::ResourceManager};
+use crate::{
+    Scene,
+    error::PrismaError,
+    render::Renderer,
+    resources::manager::ResourceManager,
+    util::{Position, Size},
+};
 
 pub struct PrismaWindow {
     pub id: u32,
@@ -13,14 +19,15 @@ impl PrismaWindow {
         builder: WindowBuilder,
         scene: Scene,
     ) -> Result<Self, PrismaError> {
-        let mut binding = video_subsystem.window(&builder.title, builder.width, builder.height);
+        let mut binding =
+            video_subsystem.window(&builder.title, builder.size.width, builder.size.height);
 
         let mut window_builder: &mut sdl3::video::WindowBuilder = binding.set_flags(builder.flags);
 
         if builder.is_pos_centered {
             window_builder = window_builder.position_centered();
         } else {
-            window_builder = window_builder.position(builder.x, builder.y);
+            window_builder = window_builder.position(builder.position.x, builder.position.y);
         }
         let window = window_builder.build().unwrap();
 
@@ -52,53 +59,57 @@ impl PrismaWindow {
     }
 
     pub fn process_scene(&mut self, resources: &mut ResourceManager) -> Result<(), PrismaError> {
-        self.scene.process_scene(resources, &self.renderer)
+        self.scene.process_scene(resources, &self.renderer)?;
+        Ok(())
     }
 }
 pub struct WindowBuilder {
     pub title: String,
     pub flags: WindowFlags,
-    pub width: u32,
-    pub height: u32,
+    pub size: Size,
     pub is_pos_centered: bool,
-    pub x: i32,
-    pub y: i32,
+    pub position: Position,
 }
 impl WindowBuilder {
-    pub fn new(title: &str) -> Self {
+    pub fn new(title: impl Into<String>) -> Self {
         Self {
-            title: title.to_string(),
+            title: title.into(),
             flags: WindowFlags::empty(),
-            x: 0,
-            y: 0,
+            size: Size {
+                width: 512,
+                height: 256,
+            },
             is_pos_centered: false,
-            width: 100,
-            height: 100,
+            position: Position { x: 100, y: 100 },
         }
     }
 
     pub fn size(mut self, width: u32, height: u32) -> Self {
-        self.width = width;
-        self.height = height;
+        self.size.height = height;
+        self.size.width = width;
         self
     }
+
     pub fn resizable(mut self) -> Self {
         self.flags |= WindowFlags::RESIZABLE;
         self
     }
+
     pub fn borderless(mut self) -> Self {
         self.flags |= WindowFlags::BORDERLESS;
 
         self
     }
+
     pub fn fullscreen(mut self) -> Self {
         self.flags |= WindowFlags::FULLSCREEN;
 
         self
     }
+
     pub fn position(mut self, x: i32, y: i32) -> Self {
-        self.x = x;
-        self.x = y;
+        self.position.x = x;
+        self.position.x = y;
         self
     }
 

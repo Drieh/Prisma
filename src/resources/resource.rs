@@ -30,18 +30,18 @@ define_resource!(
     }
 );
 
-static NEXT_ID: AtomicU32 = AtomicU32::new(0);
+static NEXT_ID: AtomicU32 = AtomicU32::new(1);
 
 pub trait Resource: Sized {
     const TYPE: ResourceType;
     type ResourceID: ResourceID<Resource = Self>;
     type GetOptions;
-
-    fn remove(id: Self::ResourceID, manager: &mut ResourceManager) -> Result<Self, PrismaError>;
 }
 
 pub trait ResourceID: Sized + Eq + Hash + Copy + Clone {
     type Resource: Resource<ResourceID = Self>;
+
+    fn none() -> Self;
 
     fn next() -> Self {
         Self::id(NEXT_ID.fetch_add(1, Ordering::Relaxed))
@@ -54,15 +54,6 @@ pub trait ResourceID: Sized + Eq + Hash + Copy + Clone {
 }
 
 pub trait ResourceGetter<T: Resource> {
-    fn get_resource(
-        &mut self,
-        id: T::ResourceID,
-        options: T::GetOptions,
-    ) -> Result<&mut T, PrismaError>;
-
-    fn take_resource(
-        &mut self,
-        id: T::ResourceID,
-        options: T::GetOptions,
-    ) -> Result<T, PrismaError>;
+    fn get(&mut self, id: T::ResourceID, options: T::GetOptions) -> Result<&T, PrismaError>;
+    fn destroy(&mut self, id: T::ResourceID) -> Result<(), PrismaError>;
 }
