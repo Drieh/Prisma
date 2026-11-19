@@ -1,6 +1,6 @@
 [package]
 name = "prismae"
-version = "0.3.2"
+version = "0.3.3"
 edition = "2024"
 license = "MIT"
 repository = "https://github.com/Drieh/Prisma"
@@ -16,7 +16,7 @@ exclude = [
 sdl3 = { version = "0.18.4", features = ["build-from-source"] }
 sdl3-ttf-src = "3.2.2"
 sdl3-ttf-sys = { version = "0.6.1", features = ["build-from-source"] }
-prisma_macros = { version = "0.3.2", path = "./prisma_macros" }
+prisma_macros = { version = "0.3.3", path = "./prisma_macros" }
 
 [workspace]
 members = ["prisma_macros"]
