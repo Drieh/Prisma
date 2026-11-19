@@ -21,7 +21,7 @@ prismae = "0.3.2"
 
 ## Example
 
-This example creates a window with a single rounded orange node.
+This example creates a window with a single lime node.
 
 ```rust
 fn main() -> Result<(), PrismaError> {
