@@ -2,11 +2,11 @@ use prismae::Prisma;
 use prismae::Scene;
 use prismae::WindowBuilder;
 use prismae::error::PrismaError;
-use prismae::event::Click;
 use prismae::event::WindowCloseRequest;
 use prismae::resources::Font;
 use prismae::util::Color;
 use prismae::util::DisplayLayout;
+use prismae::util::Size;
 
 fn main() -> Result<(), PrismaError> {
     let mut prisma = Prisma::init()?;
@@ -23,36 +23,30 @@ fn main() -> Result<(), PrismaError> {
                     bg.color(Color::LIME);
                 })
                 .border(|br| {
-                    br.radius(24);
+                    br.radius(15);
                 })
                 .text(move |txt| {
                     txt.content("hola".into())
                         .font_family(roboto_font)
-                        .font_size(12);
-                })
-                .display(DisplayLayout::InlineBlock);
+                        .font_size(48);
+                });
         })
         .hover(|style| {
             style
-                .text(|txt| {
-                    txt.font_size(64);
-                })
+                .display(DisplayLayout::InlineBlock)
                 .background(|bg| {
-                    bg.color(Color::RED);
-                });
-            println!("hover");
-        })
-        .active(|style| {
-            style.text(|txt| {
-                txt.font_size(96);
-            });
-        })
-        .on_event::<Click>(|ctx, _| {
-            ctx.current_target().style(|style| {
-                style.background(|bg| {
                     bg.color(Color::GREEN);
+                })
+                .border(|br| {
+                    br.radius(100);
+                })
+                .size(Size {
+                    width: 150,
+                    height: 100,
+                })
+                .transform(|transform| {
+                    transform.scale_x(1.5).scale_y(1.25);
                 });
-            });
         });
 
     scene.on_event::<WindowCloseRequest>(|context, _| {

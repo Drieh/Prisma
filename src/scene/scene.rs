@@ -30,9 +30,12 @@ use std::time::Instant;
 pub struct Scene {
     pub color: Color,
 
-    size: Size,
     nodes: NodeStorage,
+
+    size: Size,
+
     event_manager: EventManager,
+
     pending_nodes_handler: PendingNodesHandler,
     close_handler: CloseHandler,
 }
@@ -66,12 +69,17 @@ impl Scene {
 
     /// Returns `true` if the scene contains a node with the given ID.
     pub fn contains(&mut self, id: NodeID) -> bool {
-        self.nodes.exists(id)
+        self.nodes.contains(id)
     }
 
     /// Returns a list of all available nodes.
     pub fn get_nodes(&self) -> Vec<NodeID> {
-        self.nodes.get_nodes_id()
+        self.nodes.get_nodes()
+    }
+
+    /// Returns a list of all nodes, including nodes with [DisplayLayout::None].
+    pub fn get_all_nodes(&self) -> Vec<NodeID> {
+        self.nodes.get_all_nodes()
     }
 
     /// Returns a [`NodeView`] of the given [`NodeID`].
@@ -80,7 +88,7 @@ impl Scene {
     ///
     /// Returns [`PrismaError::NodeNotFound`] if there is no node for the given [`NodeID`].
     pub fn get_node(&mut self, id: NodeID) -> Result<Node<'_>, PrismaError> {
-        self.nodes.get_node_view(id)
+        self.nodes.get_node(id)
     }
 
     /// Returns `true` if window is about to close.
@@ -126,12 +134,16 @@ impl Scene {
                 println!("texture_required!");
                 if let Some(texture) = node_visual.get_texture_cache(req) {
                     if texture.id() != TextureID::none() {
-                        println!("removed user {id:?} for {:?}", texture.id());
                         resources.remove_user(texture.id(), id)?;
                     }
                 }
                 match req {
                     StyleTextureType::Text => {
+                        if node_visual.get_text().get_content().is_empty() {
+                            node_visual.set_texture_cache(req, TextureID::none(), state);
+                            continue;
+                        }
+
                         let texture = renderer.create_text_texture(node_visual, resources)?;
                         let text_size = Size {
                             width: texture.width,
@@ -139,14 +151,11 @@ impl Scene {
                         };
                         node_visual.set_inline_size(text_size, state);
                         let texture_id = resources.register_internal(texture)?;
-
-                        println!("created text texture. {texture_id:?} {state:?}");
                         resources.add_user(texture_id, id)?;
                         node_visual.set_texture_cache(req, texture_id, state);
                     }
                     StyleTextureType::Background => {
                         // provisional
-                        println!("created bg texture. {state:?}");
                         node_visual.set_texture_cache(req, TextureID::none(), state);
                     }
                 }
@@ -215,7 +224,7 @@ impl Scene {
     ) -> Result<(), PrismaError> {
         self.size = renderer.get_viewport_size();
 
-        for id in self.nodes.get_nodes_id() {
+        for id in self.get_all_nodes() {
             self.process_node_tree_actions(id);
             self.process_event_listener_actions(id);
             self.process_node_style_actions(id);
@@ -406,9 +415,6 @@ impl Scene {
                 NodeTreeAction::RemoveChild { child } => {
                     tree.get_unchecked_mut(id).remove_child(child);
                     tree.get_unchecked_mut(child).set_parent(None);
-                }
-                NodeTreeAction::SetParent { parent } => {
-                    tree.get_unchecked_mut(id).set_parent(parent);
                 }
             }
         }

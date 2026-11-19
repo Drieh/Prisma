@@ -6,7 +6,7 @@ use std::{
 use crate::{
     resources::{ResourceID, TextureID},
     util::{
-        Background, Border, DisplayLayout, DisplayPosition, Margin, Padding, Size, StyleCategory,
+        Background, Border, DisplayLayout, DisplayPosition, Margin, Padding, Size,
         StyleTextureCategory, Text, Transform,
     },
 };
@@ -102,8 +102,8 @@ impl Default for ResolvedVisualState {
             margin: Margin::default(),
             text: Text::default(),
             size: Size {
-                width: 0,
-                height: 0,
+                width: 100,
+                height: 100,
             },
             inline_size: Size {
                 width: 0,
@@ -361,7 +361,7 @@ impl NodeVisual {
     }
 
     pub fn get_text(&self) -> Text {
-        self.current_resolved_visual_state().text.clone()
+        self.current_resolved_visual_state().text
     }
 
     pub fn get_size(&self) -> Size {
@@ -378,6 +378,107 @@ impl NodeVisual {
 
     pub fn get_current_timer_start(&self) -> Option<Instant> {
         self.current_resolved_visual_state().timer_start
+    }
+
+    pub fn get_content_box(&self) -> Size {
+        let content_box = self.get_size();
+        let Size {
+            width: inline_width,
+            height: inline_height,
+        } = self.get_inline_size();
+        let scale_x = self.get_transform().get_scale_x();
+        let scale_y = self.get_transform().get_scale_y();
+
+        match self.get_display() {
+            DisplayLayout::Block => Size {
+                width: self.viewport.width,
+                height: inline_height,
+            },
+            DisplayLayout::Inline => Size {
+                width: inline_width,
+                height: inline_height,
+            },
+
+            DisplayLayout::InlineBlock => Size {
+                width: ((content_box.width as f32 * scale_x).round().abs() as u32)
+                    .max(inline_width),
+
+                height: ((content_box.height as f32 * scale_y).round().abs() as u32)
+                    .max(inline_height),
+            },
+            DisplayLayout::None => Size {
+                width: 0,
+                height: 0,
+            },
+        }
+    }
+
+    pub fn get_bounding_box(&self) -> Size {
+        let content_box = self.get_size();
+        let Size {
+            width: inline_width,
+            height: inline_height,
+        } = self.get_inline_size();
+        let scale_x = self.get_transform().get_scale_x();
+        let scale_y = self.get_transform().get_scale_y();
+
+        let padding = self.get_padding();
+        let border = self.get_border();
+
+        let padding_width = padding.get_left() + padding.get_right();
+        let padding_height = padding.get_top() + padding.get_bottom();
+
+        let border_width = border.get_left() + border.get_right();
+        let border_height = border.get_top() + border.get_bottom();
+
+        match self.get_display() {
+            DisplayLayout::Block => Size {
+                width: self.viewport.width,
+                height: inline_height + padding_width + border_width,
+            },
+            DisplayLayout::Inline => Size {
+                width: inline_width + padding_width,
+                height: inline_height + padding_height,
+            },
+
+            DisplayLayout::InlineBlock => Size {
+                width: ((content_box.width as f32 * scale_x).round().abs() as u32
+                    + padding_width
+                    + border_width)
+                    .max(inline_width),
+
+                height: ((content_box.height as f32 * scale_y).round().abs() as u32
+                    + padding_height
+                    + border_height)
+                    .max(inline_height),
+            },
+            DisplayLayout::None => Size {
+                width: 0,
+                height: 0,
+            },
+        }
+    }
+
+    pub fn get_margin_box(&self) -> Size {
+        let bounding_box = self.get_bounding_box();
+        let margin = self.get_margin();
+
+        let left = margin.get_left();
+        let top = margin.get_top();
+        let right = margin.get_right();
+        let bottom = margin.get_bottom();
+
+        if self.get_display() == DisplayLayout::Block {
+            Size {
+                width: bounding_box.width,
+                height: bounding_box.height + top + bottom,
+            }
+        } else {
+            Size {
+                width: bounding_box.width + left + right,
+                height: bounding_box.height + top + bottom,
+            }
+        }
     }
 
     /* Setter */

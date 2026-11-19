@@ -60,8 +60,8 @@ style_category!(
         y: i32 => 0,
         layer: usize => 0,
         rotation: f32 => 0.0,
-        scale_x: f32 => 0.0,
-        scale_y: f32 => 0.0,
+        scale_x: f32 => 1.0,
+        scale_y: f32 => 1.0,
     }
 );
 

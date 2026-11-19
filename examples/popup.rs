@@ -50,43 +50,47 @@ fn main() -> Result<(), PrismaError> {
                     //text.content("abrir popup hover".into());
                 });
         })
-        .on_event::<NodeCreation>(|ctx, _| {
+        .on_event::<NodeCreation>(move |ctx, _| {
             ctx.current_target().set_state::<PopupActive>(false);
-            println!("creatoon")
+            let popup = ctx
+                .new_node()
+                .style(move |style| {
+                    style
+                        .background(|bg| {
+                            bg.color(Color::YELLOW);
+                        })
+                        .transform(|transform| {
+                            transform.layer(1).x(200).y(200);
+                        })
+                        .size(Size {
+                            width: 200,
+                            height: 200,
+                        })
+                        .text(move |text| {
+                            text.content("hola".into()).font_family(font_roboto);
+                        })
+                        .display(DisplayLayout::None);
+                })
+                .hover(|style| {
+                    style.display(DisplayLayout::Block);
+                })
+                .get_id();
+            ctx.current_target().set_state::<PopupID>(popup);
         })
-        .on_event::<Click>(move |ctx, _| {
+        .on_event::<Click>(|ctx, _| {
             let mut node = ctx.current_target();
             let popup_active = *node.get_state::<PopupActive>().unwrap();
-            node.set_state::<PopupActive>(!popup_active);
+            let popup = *node.get_state::<PopupID>().unwrap();
 
+            node.set_state::<PopupActive>(!popup_active);
             if popup_active {
-                let popup = node.remove_state::<PopupID>().unwrap();
-                ctx.destroy(popup);
+                ctx.get_node(popup).unwrap().style(|style| {
+                    style.display(DisplayLayout::None);
+                });
             } else {
-                let popup = ctx
-                    .new_node()
-                    .style(move |style| {
-                        style
-                            .background(|bg| {
-                                bg.color(Color::YELLOW);
-                            })
-                            .transform(|transform| {
-                                transform.layer(1).x(200).y(200);
-                            })
-                            .size(Size {
-                                width: 200,
-                                height: 200,
-                            })
-                            .text(move |text| {
-                                text.content("hola".into()).font_family(font_roboto);
-                            });
-                    })
-                    .hover(|style| {
-                        style.display(DisplayLayout::InlineBlock);
-                    })
-                    .get_id();
-                ctx.current_target().set_state::<PopupID>(popup);
-                ctx.current_target().add_child(popup).unwrap();
+                ctx.get_node(popup).unwrap().style(|style| {
+                    style.display(DisplayLayout::InlineBlock);
+                });
             }
         })
         .get_id();

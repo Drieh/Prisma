@@ -229,7 +229,7 @@ impl EventManager {
             let mut node = context
                 .get_node(id)
                 .expect("Invariant violated: node tree contains an invalid ID.");
-            let Size { width, height } = node.get_padding_box();
+            let Size { width, height } = node.get_visual().get_bounding_box();
             let Position {
                 x: node_x,
                 y: node_y,

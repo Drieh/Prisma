@@ -2,14 +2,14 @@ use std::{collections::BTreeMap, ffi::CString, ptr::null};
 
 use crate::{
     error::PrismaError,
-    node::component::{NodeVisual, StyleTextureType, StyleVisualState},
+    node::component::{NodeVisual, StyleTextureType},
     render::math::{elipse_top_arc, line},
     resources::{
         FontID, FontOptions, PrismaTexture, ResourceID, TextureID, TextureOptions,
         manager::ResourceManager,
     },
     scene::{NodeID, Scene, storage::StorageHandler},
-    util::{Position, Size, Text},
+    util::{DisplayLayout, Position, Size},
 };
 use sdl3::{
     rect::Point,
@@ -42,26 +42,22 @@ impl Renderer {
     }
 
     pub fn render(&mut self, scene: &mut Scene, resources: &mut ResourceManager) {
-        let mut storage = scene.storage();
-        let render_queue = self.build_render_queue(&mut storage);
+        let render_queue = self.build_render_queue(scene);
         self.draw(render_queue, scene, resources);
 
         self.canvas.present();
     }
 
-    fn build_render_queue(&self, storage: &StorageHandler) -> BTreeMap<usize, Vec<NodeID>> {
+    fn build_render_queue(&self, scene: &mut Scene) -> BTreeMap<usize, Vec<NodeID>> {
         let mut render_queue: BTreeMap<usize, Vec<NodeID>> = BTreeMap::new();
 
-        for id in storage.get_nodes() {
+        for id in scene.get_nodes() {
+            let storage = scene.storage();
             let tree = storage.tree.get_unchecked(id);
 
             if tree.get_parent().is_none() {
-                self.visit(
-                    id,
-                    storage,
-                    storage.visual.get_unchecked(id).get_transform().get_layer(),
-                    &mut render_queue,
-                );
+                let parent_layer = storage.visual.get_unchecked(id).get_transform().get_layer();
+                self.visit(id, scene, parent_layer, &mut render_queue);
             }
         }
         render_queue
@@ -70,11 +66,11 @@ impl Renderer {
     fn visit(
         &self,
         id: NodeID,
-        storage: &StorageHandler,
+        scene: &mut Scene,
         parent_layer: usize,
         render_queue: &mut BTreeMap<usize, Vec<NodeID>>,
     ) {
-        let StorageHandler { tree, visual, .. } = storage;
+        let StorageHandler { tree, visual, .. } = scene.storage();
         let current_layer = visual.get_unchecked(id).get_transform().get_layer();
 
         let layer = if current_layer == 0 {
@@ -86,7 +82,7 @@ impl Renderer {
         render_queue.entry(layer).or_default().push(id);
 
         for child in tree.get_unchecked(id).get_children() {
-            self.visit(child, storage, layer, render_queue);
+            self.visit(child, scene, layer, render_queue);
         }
     }
 
@@ -138,20 +134,25 @@ impl Renderer {
 
         let Position { x: pos_x, y: pos_y } = node.get_scene_position();
         let node_visual = node.get_visual().clone();
-        let Size { width, height } = node.get_padding_box();
+        let Size { width, height } = node_visual.get_bounding_box();
         let width = width as i32;
         let height = height as i32;
         let scale_x = node_visual.get_transform().get_scale_x();
         let scale_y = node_visual.get_transform().get_scale_y();
         let border_radius = node_visual.get_border().get_radius();
-        let radius_x = if border_radius as f32 * scale_x > width as f32 / 2.0 {
-            width / 2
+
+        let radius_x = if border_radius as f32 * scale_x > width as f32 / 2.0
+            || border_radius as f32 * scale_y > height as f32 / 2.0
+        {
+            (width / 2).min(height / 2)
         } else {
             (border_radius as f32 * scale_x).round() as i32
         };
 
-        let radius_y = if border_radius as f32 * scale_y > height as f32 / 2.0 {
-            height / 2
+        let radius_y = if border_radius as f32 * scale_x > width as f32 / 2.0
+            || border_radius as f32 * scale_y > height as f32 / 2.0
+        {
+            (width / 2).min(height / 2)
         } else {
             (border_radius as f32 * scale_y).round() as i32
         };
@@ -258,9 +259,10 @@ impl Renderer {
         resources: &mut ResourceManager,
     ) -> Result<PrismaTexture, PrismaError> {
         let node_text = visual.get_text();
+
         if node_text.get_font_family() == FontID::none() {
             return Err(PrismaError::render_error(
-                "Text Renderer: cannot create a text texture without a font.",
+                "Cannot create a text texture without a font.",
             ));
         }
         unsafe {

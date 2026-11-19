@@ -1,5 +1,5 @@
 use crate::error::PrismaError;
-use crate::node::component::{NodeQueue, NodeState, NodeVisual};
+use crate::node::component::{NodePosition, NodeQueue, NodeState, NodeVisual};
 use crate::scene::node::{NodeID, component::NodeTree};
 use crate::scene::storage::macros::define_handlers;
 use std::collections::HashMap;
@@ -9,6 +9,7 @@ define_handlers!(
     {StateHandler, NodeState}
     {VisualStateHandler, NodeVisual}
     {QueueHandler, NodeQueue}
+    {PositionHandler, NodePosition}
 );
 
 pub struct StorageHandler<'a> {
@@ -16,6 +17,7 @@ pub struct StorageHandler<'a> {
     pub state: StateHandler<'a>,
     pub queue: QueueHandler<'a>,
     pub visual: VisualStateHandler<'a>,
+    pub position: PositionHandler<'a>,
 }
 impl<'a> StorageHandler<'a> {
     /// Returns `true` if the node exists.
@@ -25,8 +27,13 @@ impl<'a> StorageHandler<'a> {
             state,
             visual,
             queue,
+            position,
         } = self;
-        tree.contains(id) && state.contains(id) && visual.contains(id) && queue.contains(id)
+        tree.contains(id)
+            && state.contains(id)
+            && visual.contains(id)
+            && queue.contains(id)
+            && position.contains(id)
     }
 
     /// Returns a list of all existing nodes.
@@ -40,11 +47,13 @@ impl<'a> StorageHandler<'a> {
             state,
             visual,
             queue,
+            position,
         } = self;
         queue.insert(id);
         state.insert(id);
         visual.insert(id);
         tree.insert(id);
+        position.insert(id);
     }
 
     pub(crate) fn remove_context(&mut self, id: NodeID) {
@@ -53,6 +62,7 @@ impl<'a> StorageHandler<'a> {
             state,
             visual,
             queue,
+            position,
         } = self;
 
         if let Some(parent) = tree.get_unchecked(id).get_parent() {
@@ -63,5 +73,6 @@ impl<'a> StorageHandler<'a> {
         state.remove(id);
         visual.remove(id);
         tree.remove(id);
+        position.remove(id);
     }
 }

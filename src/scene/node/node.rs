@@ -11,7 +11,7 @@ use crate::{
         node::component::NodeState,
         storage::{NodeStorage, StorageHandler},
     },
-    util::{Border, Color, DisplayLayout, Margin, Padding, Position, Scale, Size},
+    util::{DisplayLayout, Position, Size},
 };
 use std::{
     any::Any,
@@ -27,7 +27,7 @@ pub struct Node<'a> {
 }
 impl<'a> Node<'a> {
     pub(crate) fn new(id: NodeID, nodes: &'a mut NodeStorage) -> Result<Self, PrismaError> {
-        if nodes.exists(id) {
+        if nodes.contains(id) {
             Ok(Self {
                 id,
                 storage: nodes.storage(),
@@ -184,27 +184,6 @@ impl<'a> Node<'a> {
         Ok(self)
     }
 
-    /// Sets the node's parent to the given option [`NodeID`] value.
-    ///
-    /// # Behavior
-    ///
-    /// This operation is deferred.
-    ///
-    /// # Errors
-    ///
-    /// Returns [`PrismaError::NodeNotFound`] if the parent node does not exist.
-    pub fn set_parent(&mut self, parent: Option<NodeID>) -> Result<&mut Self, PrismaError> {
-        if let Some(parent) = parent {
-            if !self.storage.contains(parent) {
-                return Err(PrismaError::NodeNotFound(parent));
-            }
-            self.queue().push_back(NodeTreeAction::SetParent {
-                parent: Some(parent),
-            });
-        }
-        Ok(self)
-    }
-
     /// Returns the [`NodeID`] of the parent node, if any.
     pub fn get_parent(&self) -> Option<NodeID> {
         self.storage.tree.get_unchecked(self.id).get_parent()
@@ -234,113 +213,6 @@ impl<'a> Node<'a> {
             Ok(self.scene_position(parent)? + Position { x, y })
         } else {
             Ok(Position { x, y })
-        }
-    }
-
-    pub fn get_content_box(&self) -> Size {
-        self.get_visual().get_size()
-    }
-
-    pub fn get_bounding_box(&self) -> Size {
-        let content_box = self.get_content_box();
-        let node_visual = self.get_visual();
-        let Size {
-            width: inline_w,
-            height: inline_h,
-        } = node_visual.get_inline_size();
-        let scale_x = node_visual.get_transform().get_scale_x();
-        let scale_y = node_visual.get_transform().get_scale_y();
-
-        match node_visual.get_display() {
-            DisplayLayout::Block => Size {
-                width: node_visual.viewport.width,
-                height: inline_h,
-            },
-            DisplayLayout::Inline => node_visual.get_inline_size(),
-
-            DisplayLayout::InlineBlock => Size {
-                width: (content_box.width as f32 * scale_x)
-                    .max(inline_w as f32)
-                    .abs()
-                    .round() as u32,
-                height: (content_box.height as f32 * scale_y)
-                    .max(inline_h as f32)
-                    .abs()
-                    .round() as u32,
-            },
-            DisplayLayout::None => Size {
-                width: 0,
-                height: 0,
-            },
-        }
-    }
-
-    pub fn get_padding_box(&self) -> Size {
-        let bounding_box = self.get_bounding_box();
-        let node_visual = self.get_visual();
-        let left = node_visual.get_padding().get_left();
-        let top = node_visual.get_padding().get_top();
-        let right = node_visual.get_padding().get_right();
-        let bottom = node_visual.get_padding().get_bottom();
-
-        if node_visual.get_display() == DisplayLayout::Block {
-            Size {
-                width: bounding_box.width,
-                height: bounding_box.height + top + bottom,
-            }
-        } else {
-            Size {
-                width: bounding_box.width + left + right,
-                height: bounding_box.height + top + bottom,
-            }
-        }
-    }
-
-    pub fn get_border_box(&self) -> Size {
-        let padding_box = self.get_padding_box();
-        let node_visual = self.get_visual();
-        let padding = node_visual.get_padding();
-
-        let border_top = padding.get_top();
-        let border_bottom = padding.get_bottom();
-        let border_left = padding.get_left();
-        let border_right = padding.get_right();
-
-        let height = padding_box.height + border_top + border_bottom;
-
-        if node_visual.get_display() == DisplayLayout::Block {
-            Size {
-                width: padding_box.width,
-                height,
-            }
-        } else {
-            Size {
-                width: padding_box.width + border_left + border_right,
-                height,
-            }
-        }
-    }
-
-    pub fn get_margin_box(&self) -> Size {
-        let padding_box = self.get_padding_box();
-        let node_visual = self.get_visual();
-        let margin = node_visual.get_margin();
-
-        let left = margin.get_left();
-        let top = margin.get_top();
-        let right = margin.get_right();
-        let bottom = margin.get_bottom();
-
-        if node_visual.get_display() == DisplayLayout::Block {
-            Size {
-                width: padding_box.width,
-                height: padding_box.height + top + bottom,
-            }
-        } else {
-            Size {
-                width: padding_box.width + left + right,
-                height: padding_box.height + top + bottom,
-            }
         }
     }
 

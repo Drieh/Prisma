@@ -75,8 +75,5 @@ define_node_actions!(
         RemoveChild {
             child: NodeID,
         }
-        SetParent {
-            parent: Option<NodeID>,
-        }
     },
 );
