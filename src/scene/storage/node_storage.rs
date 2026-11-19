@@ -89,6 +89,6 @@ impl NodeStorage {
     }
 
     pub fn get_node_position(&self) {
-        let nodes = self.get_nodes();
+        let _nodes = self.get_nodes();
     }
 }

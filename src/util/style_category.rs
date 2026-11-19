@@ -1,5 +1,5 @@
 use crate::{
-    node::component::{StyleTextureSeed, StyleTextureType},
+    node::component::StyleTextureSeed,
     resources::{FontID, ResourceID, TextureID},
     util::{
         Color,

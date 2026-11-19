@@ -1,14 +1,13 @@
 use std::{
-    collections::{HashMap, HashSet},
+    collections::HashMap,
     path::Path,
 };
 
 use crate::{
-    Scene,
     error::PrismaError,
-    node::{NodeID, component::StyleTextureType},
+    node::NodeID,
     resources::{
-        PrismaTexture, Resource, ResourceEntry, ResourceID, TextureID, registry::ResourceRegistry,
+        PrismaTexture, ResourceEntry, TextureID, registry::ResourceRegistry,
     },
 };
 

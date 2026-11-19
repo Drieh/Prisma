@@ -11,7 +11,7 @@ use crate::{
         node::component::NodeState,
         storage::{NodeStorage, StorageHandler},
     },
-    util::{DisplayLayout, Position, Size},
+    util::Position,
 };
 use std::{
     any::Any,

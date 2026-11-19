@@ -131,7 +131,6 @@ impl Scene {
             };
 
             if texture_required {
-                println!("texture_required!");
                 if let Some(texture) = node_visual.get_texture_cache(req) {
                     if texture.id() != TextureID::none() {
                         resources.remove_user(texture.id(), id)?;

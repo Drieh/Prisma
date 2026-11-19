@@ -1,7 +1,6 @@
 use std::path::Path;
 
 use crate::{
-    app::PrismaWindow,
     error::PrismaError,
     node::NodeID,
     resources::{

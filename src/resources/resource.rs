@@ -1,5 +1,4 @@
 use crate::error::PrismaError;
-use crate::resources::manager::ResourceManager;
 use sdl3::sys::render::{SDL_DestroyTexture, SDL_Texture};
 use sdl3_ttf_sys::ttf::{TTF_CloseFont, TTF_Font};
 use std::{

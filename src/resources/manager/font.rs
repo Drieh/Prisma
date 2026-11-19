@@ -1,7 +1,6 @@
 use std::{
     collections::HashMap,
     ffi::{CStr, CString},
-    hash::Hash,
     path::Path,
 };
 
@@ -9,7 +8,6 @@ use sdl3::sys::error::SDL_GetError;
 use sdl3_ttf_sys::ttf::TTF_OpenFont;
 
 use crate::{
-    Scene,
     error::PrismaError,
     node::NodeID,
     resources::{Font, FontID, ResourceEntry, registry::ResourceRegistry},

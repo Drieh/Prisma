@@ -9,7 +9,7 @@ use crate::{
         manager::ResourceManager,
     },
     scene::{NodeID, Scene, storage::StorageHandler},
-    util::{DisplayLayout, Position, Size},
+    util::{Position, Size},
 };
 use sdl3::{
     rect::Point,
